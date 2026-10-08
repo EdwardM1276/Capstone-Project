@@ -1,0 +1,77 @@
+{
+  "source": "C:\\Users\\27746\\ITDPA\\Capstone-Project\\data\\raw\\paysim.csv",
+  "source_size_bytes": 493534783,
+  "source_modified_ns": 1791468921745817300,
+  "row_count": 6362620,
+  "column_count": 11,
+  "columns": [
+    "step",
+    "type",
+    "amount",
+    "nameOrig",
+    "oldbalanceOrg",
+    "newbalanceOrig",
+    "nameDest",
+    "oldbalanceDest",
+    "newbalanceDest",
+    "isFraud",
+    "isFlaggedFraud"
+  ],
+  "missing_values": {
+    "step": 0,
+    "type": 0,
+    "amount": 0,
+    "nameOrig": 0,
+    "oldbalanceOrg": 0,
+    "newbalanceOrig": 0,
+    "nameDest": 0,
+    "oldbalanceDest": 0,
+    "newbalanceDest": 0,
+    "isFraud": 0,
+    "isFlaggedFraud": 0
+  },
+  "invalid_numeric_values": {
+    "step": 0,
+    "amount": 0,
+    "oldbalanceOrg": 0,
+    "newbalanceOrig": 0,
+    "oldbalanceDest": 0,
+    "newbalanceDest": 0,
+    "isFraud": 0,
+    "isFlaggedFraud": 0
+  },
+  "non_finite_numeric_values": {
+    "step": 0,
+    "amount": 0,
+    "oldbalanceOrg": 0,
+    "newbalanceOrig": 0,
+    "oldbalanceDest": 0,
+    "newbalanceDest": 0,
+    "isFraud": 0,
+    "isFlaggedFraud": 0
+  },
+  "negative_transaction_amounts": 0,
+  "negative_balances": {
+    "oldbalanceOrg": 0,
+    "newbalanceOrig": 0,
+    "oldbalanceDest": 0,
+    "newbalanceDest": 0
+  },
+  "invalid_target_labels": 0,
+  "invalid_flag_labels": 0,
+  "negative_time_steps": 0,
+  "invalid_transaction_types": 0,
+  "duplicate_records": 0,
+  "transaction_types": [
+    "CASH_IN",
+    "CASH_OUT",
+    "DEBIT",
+    "PAYMENT",
+    "TRANSFER"
+  ],
+  "class_distribution": {
+    "0": 6354407,
+    "1": 8213
+  },
+  "passed": true
+}

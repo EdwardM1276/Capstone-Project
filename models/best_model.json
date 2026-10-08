@@ -1,0 +1,97 @@
+{
+  "model": "XGBoost",
+  "imbalance_strategy": "smote",
+  "selection_metric": "pr_auc",
+  "metrics": {
+    "precision": 1.0,
+    "recall": 1.0,
+    "f1": 1.0,
+    "roc_auc": 1.0,
+    "pr_auc": 1.0
+  },
+  "threshold": 0.5,
+  "random_state": 42,
+  "test_size": 0.2,
+  "source_rows": 6362620,
+  "sampled_rows": 100000,
+  "training_rows": 80000,
+  "test_rows": 20000,
+  "tuning": {
+    "Random Forest [class_weight]": {
+      "best_params": {
+        "classifier__max_depth": null,
+        "classifier__max_features": 0.7,
+        "classifier__min_samples_leaf": 2,
+        "classifier__min_samples_split": 4,
+        "classifier__n_estimators": 314
+      },
+      "best_cv_pr_auc": 1.0000000000000002,
+      "tuning_rows": 20000,
+      "iterations": 2
+    },
+    "XGBoost [class_weight]": {
+      "best_params": {
+        "classifier__colsample_bytree": 0.7810890415965769,
+        "classifier__learning_rate": 0.28620000579477656,
+        "classifier__max_depth": 5,
+        "classifier__min_child_weight": 8,
+        "classifier__n_estimators": 288,
+        "classifier__subsample": 0.8588975552812704
+      },
+      "best_cv_pr_auc": 1.0,
+      "tuning_rows": 20000,
+      "iterations": 2
+    },
+    "Random Forest [smote]": {
+      "best_params": {
+        "classifier__max_depth": 20,
+        "classifier__max_features": "sqrt",
+        "classifier__min_samples_leaf": 3,
+        "classifier__min_samples_split": 9,
+        "classifier__n_estimators": 288
+      },
+      "best_cv_pr_auc": 1.0,
+      "tuning_rows": 20000,
+      "iterations": 2
+    },
+    "XGBoost [smote]": {
+      "best_params": {
+        "classifier__colsample_bytree": 0.8060414634987569,
+        "classifier__learning_rate": 0.04799297642904081,
+        "classifier__max_depth": 5,
+        "classifier__min_child_weight": 8,
+        "classifier__n_estimators": 216,
+        "classifier__subsample": 0.8603902541101232
+      },
+      "best_cv_pr_auc": 1.0000000000000002,
+      "tuning_rows": 20000,
+      "iterations": 2
+    },
+    "Random Forest [smote_tomek]": {
+      "best_params": {
+        "classifier__max_depth": 20,
+        "classifier__max_features": "sqrt",
+        "classifier__min_samples_leaf": 3,
+        "classifier__min_samples_split": 9,
+        "classifier__n_estimators": 288
+      },
+      "best_cv_pr_auc": 1.0,
+      "tuning_rows": 20000,
+      "iterations": 2
+    },
+    "XGBoost [smote_tomek]": {
+      "best_params": {
+        "classifier__colsample_bytree": 0.7810890415965769,
+        "classifier__learning_rate": 0.28620000579477656,
+        "classifier__max_depth": 5,
+        "classifier__min_child_weight": 8,
+        "classifier__n_estimators": 288,
+        "classifier__subsample": 0.8588975552812704
+      },
+      "best_cv_pr_auc": 1.0,
+      "tuning_rows": 20000,
+      "iterations": 2
+    }
+  },
+  "best_model_file": "best_model.joblib"
+}
