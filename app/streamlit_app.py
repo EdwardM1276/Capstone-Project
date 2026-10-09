@@ -58,8 +58,47 @@ st.markdown(
     [data-testid="stSidebar"] p,
     [data-testid="stSidebar"] label,
     [data-testid="stSidebar"] span {
-        color: #10233f !important;
+        color: #000000 !important;
         opacity: 1 !important;
+    }
+    [data-testid="stSidebar"] [role="radiogroup"] *,
+    [data-testid="stSelectbox"] label,
+    [data-testid="stSelectbox"] [data-baseweb="select"],
+    [data-testid="stSelectbox"] [data-baseweb="select"] *,
+    [data-baseweb="popover"] [role="option"] {
+        color: #000000 !important;
+        opacity: 1 !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"],
+    [data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"] *,
+    [data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"] span,
+    [data-testid="stSidebarCollapsedControl"],
+    [data-testid="stSidebarCollapsedControl"] *,
+    button[aria-label*="sidebar" i],
+    button[aria-label*="sidebar" i] * {
+        color: #155eef !important;
+        fill: #155eef !important;
+        stroke: #155eef !important;
+    }
+    [data-testid="stSidebarCollapseButton"]:hover svg,
+    [data-testid="stSidebarCollapseButton"]:focus svg,
+    [data-testid="stSidebarCollapseButton"]:active svg,
+    [data-testid="stSidebarCollapsedControl"]:hover svg,
+    [data-testid="stSidebarCollapsedControl"]:focus svg,
+    [data-testid="stSidebarCollapsedControl"]:active svg,
+    button[aria-label*="sidebar" i]:hover svg,
+    button[aria-label*="sidebar" i]:focus svg,
+    button[aria-label*="sidebar" i]:active svg {
+        color: #155eef !important;
+        fill: #155eef !important;
+        stroke: #155eef !important;
+    }
+    [data-testid="stSelectbox"] [data-baseweb="select"] > div {
+        background: #ffffff !important;
+        border-color: #64748b !important;
+    }
+    [data-testid="stSelectbox"] [data-baseweb="select"] svg {
+        fill: #000000 !important;
     }
     html, body, [class*="css"] {
         color: var(--ink);
