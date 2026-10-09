@@ -21,11 +21,8 @@ MODEL_INPUT_COLUMNS = [
     "type",
     "amount",
     "oldbalanceOrg",
-    "newbalanceOrig",
     "oldbalanceDest",
-    "newbalanceDest",
     TARGET_COLUMN,
-    "isFlaggedFraud",
 ]
 
 

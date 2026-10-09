@@ -1,7 +1,7 @@
 import argparse
 import json
 
-from fraud_detection.config import DEFAULT_DATA_PATH, FIGURE_DIR, REPORT_DIR
+from fraud_detection.config import DEFAULT_DATA_PATH, DEFAULT_MAX_ROWS, FIGURE_DIR, REPORT_DIR
 from fraud_detection.data import validate_csv
 from fraud_detection.training import (
     DEFAULT_MODELS,
@@ -26,18 +26,21 @@ def _parser() -> argparse.ArgumentParser:
     train.add_argument(
         "--max-rows",
         type=int,
-        default=0,
-        help="Use a stratified sample for modelling; 0 trains on the entire dataset.",
+        default=DEFAULT_MAX_ROWS,
+        help=f"Stratified sample size for modelling; 0 uses the full dataset (default: {DEFAULT_MAX_ROWS}).",
     )
     train.add_argument("--models", nargs="+", choices=DEFAULT_MODELS, default=DEFAULT_MODELS)
     train.add_argument(
         "--imbalance-strategies",
         nargs="+",
         choices=DEFAULT_STRATEGIES,
-        default=["class_weight"],
+        default=DEFAULT_STRATEGIES,
     )
-    train.add_argument("--tune-rows", type=int, default=100_000)
-    train.add_argument("--search-iterations", type=int, default=5)
+    train.add_argument("--low-risk-upper-bound", type=float, default=0.01)
+    train.add_argument("--high-risk-lower-bound", type=float, default=0.05)
+    train.add_argument("--minimum-recall-target", type=float, default=0.90)
+    train.add_argument("--false-negative-cost", type=float, default=10.0)
+    train.add_argument("--false-positive-cost", type=float, default=1.0)
     return parser
 
 
@@ -58,8 +61,11 @@ def main() -> None:
         max_rows=args.max_rows if args.max_rows > 0 else None,
         model_names=args.models,
         strategies=args.imbalance_strategies,
-        tune_rows=args.tune_rows,
-        search_iterations=args.search_iterations,
+        low_risk_upper_bound=args.low_risk_upper_bound,
+        high_risk_lower_bound=args.high_risk_lower_bound,
+        minimum_recall_target=args.minimum_recall_target,
+        false_negative_cost=args.false_negative_cost,
+        false_positive_cost=args.false_positive_cost,
     )
     print(results.to_string(index=False))
 

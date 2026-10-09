@@ -1,6 +1,6 @@
 # Mobile Money Fraud Detection
 
-This project implements the Deliverable 3 modelling plan for ITDPA3-34:
+This project implements the Deliverable 4 modelling plan for ITDPA3-34:
 classifying fraudulent mobile-money transactions in the PaySim synthetic
 dataset. It provides reusable preprocessing and feature engineering, an
 automated model-comparison workflow, saved estimators, evaluation reports,
@@ -22,8 +22,8 @@ tests/                   Unit tests for data checks and features
 
 Data validation and loading are in `data.py`; feature generation is in
 `features.py`; reusable encoders and scalers are in `preprocessing.py`;
-estimators and imbalance samplers are in `models.py`; the training and search
-workflow is in `training.py`; metric calculations are in `evaluation.py`; and
+estimators and imbalance samplers are in `models.py`; the training workflow is
+in `training.py`; metric calculations are in `evaluation.py`; and
 model loading and transaction scoring are in `prediction.py`.
 
 ## Requirements and installation
@@ -76,59 +76,83 @@ modified.
 
 ### 2. Train and compare models
 
-For a quick, deterministic demonstration run on a stratified sample of 100,000
-rows, including all three imbalance strategies:
+The default local run evaluates all five models against all three imbalance
+strategies on a deterministic, class-stratified sample of 200,000 rows:
 
 ```powershell
-python -m fraud_detection.cli train --max-rows 100000 --imbalance-strategies class_weight smote smote_tomek --tune-rows 20000 --search-iterations 2
+python -m fraud_detection.cli train
 ```
 
-To train on the complete dataset, omit `--max-rows` (or set it to `0`):
+To use the complete 6.36 million-row dataset, explicitly set `--max-rows 0`
+on a machine with sufficient memory:
 
 ```powershell
-python -m fraud_detection.cli train --imbalance-strategies class_weight smote smote_tomek
+python -m fraud_detection.cli train --max-rows 0
 ```
 
-The default training configuration compares all five models using class
-weighting. Add the three strategies shown above to compare class weighting,
-SMOTE, and SMOTE with Tomek Links. Resampling occurs inside each training fold
-and only after the stratified train/test split. Full-data SMOTE runs need
-substantially more memory and time than a sample run; use a stratified sample
-for a machine with limited resources.
+All 15 pairings receive the same sampled rows, chronological partitions, and
+fixed baseline configurations. Partitions are made by complete `step` groups:
+the earliest 60% of distinct hourly steps for fitting, the next 20% of steps
+for threshold selection, and the latest 20% of steps for final testing.
+Transaction volume varies substantially by hour, so row counts need not match
+these time percentages. Resampling is fit only inside the training
+pipeline. No test metric is used to select the winning pairing. Each validation
+threshold is chosen to maximize precision subject to at least 90% recall; the
+winner is selected by validation cost, using 10 per false negative and 1 per
+false positive. Those policy values are configurable. The 90% recall floor is
+this project's operating target, not a universal industry threshold; review it
+against measured review capacity and fraud-loss costs. Per-pair fit time and
+test throughput are reported, with the PR-AUC/throughput frontier computed on
+the final period for comparison only.
 
-The split is 80% training and 20% holdout testing, stratified by `isFraud`,
-with random seed 42. A reproducible, stratified sample is selected from the
-full input when `--max-rows` is set; the quality report still covers every
-source row. RandomizedSearchCV tunes Random Forest and XGBoost using
-three-fold stratified cross-validation and average precision. Set
-`--tune-rows` and `--search-iterations` to adjust the tuning workload.
+The 200,000-row local cap is a conservative working estimate for this 7.7 GiB
+machine, based on the previously generated 100,000-row 15-pair run; it is not a
+guarantee if other applications consume memory. Close memory-heavy applications
+before running. At least 30 fraud cases are required in both validation and test
+windows; the pipeline stops if the sampled timeline cannot meet that minimum.
+Full-data SMOTE can synthesize millions of rows, so `--max-rows 0` is intended
+for a higher-memory machine. The sample remains a pilot, not a substitute for
+full-data conclusions.
+
+The sample is selected reproducibly and stratified by label; temporal
+boundaries are applied afterward by `step`, keeping each hour in exactly one
+partition. The full input is validated even when modeling a sample. Models use
+the same fixed baseline settings, avoiding an asymmetric search budget.
 
 The workflow trains Logistic Regression, Random Forest, XGBoost, a
 scikit-learn feedforward neural network, and LightGBM. Numeric inputs are
 scaled for Logistic Regression and the neural network; transaction type is
 one-hot encoded for every estimator. Missing categorical/numeric values have
 mode/median imputers in the preprocessing pipeline, although source validation
-fails on missing values in required columns. The final model is selected by
-holdout PR-AUC, with recall and F1 used to break ties; accuracy is not used as
-the main success criterion.
+fails on missing values in required columns. Features are limited to information
+available before transaction completion: transaction type, amount, pre-event
+balances, and time-of-day derived from `step`. Absolute step, post-event
+balances, identifiers, and `isFlaggedFraud` are excluded from model inputs.
 
 ### 3. Results and generated files
 
 Training writes:
 
 - `reports/model_comparison.csv` with precision, recall, F1, ROC-AUC, PR-AUC,
-  threshold, and test-set size for each model and imbalance strategy.
+  Brier score, validation threshold metrics, weighted false-positive/negative
+  cost, hourly-bootstrap confidence intervals for precision/recall/PR-AUC,
+  fit/prediction duration, scoring
+  throughput, and Pareto status for each pairing.
+- `reports/imbalance_strategy_comparison.csv` with average model performance
+  and runtime for each imbalance strategy.
+- `reports/probability_bands.csv` with the number of transactions and observed
+  fraud rate in each model's low/medium/high probability band.
 - `reports/data_quality.json` and `reports/training_summary.json`.
-- Confusion matrices, ROC curves, precision-recall curves, class distribution,
-  and supported model feature-importance figures in `reports/figures/`.
+- A six-metric grouped performance dashboard, two-panel Pareto dashboard,
+  algorithm-by-treatment PR-AUC heatmap, high-score observed-risk map, and class
+  distribution in `reports/figures/`. Obsolete generated PNGs are removed after
+  a successful run so the figures directory represents only the latest run.
 - Individual fitted estimators and `models/best_model.joblib`, selected for
   application use, plus `models/best_model.json`.
 
-The included comparison files and deployment model are from the 100,000-row
-stratified demonstration command above. Its 20,000-row holdout contains 26 fraud
-cases, so its scores demonstrate the workflow and must not be treated as a
-stable estimate of performance on the full dataset. Rerun training without
-`--max-rows` for full-dataset evaluation before drawing conclusions.
+The included comparison files and deployment model predate this methodology
+update. Rerun training before using them. Check `reports/training_summary.json`
+for the sampled row count, time boundaries, threshold policy, and fraud counts.
 
 ### 4. Run the application
 
@@ -139,8 +163,9 @@ streamlit run app/streamlit_app.py
 ```
 
 The app includes a project overview, an interactive transaction form, the
-model-comparison table, and generated visualisations. The form displays the
-predicted class and the saved model's fraud probability at a 0.50 threshold.
+model-comparison table, and generated visualisations. The form requests only
+pre-transaction information and applies the selected model's validation-derived
+threshold.
 It loads the exported model and does not retrain at launch. The
 `examples/sample_transactions.csv` file contains sample input values.
 
@@ -148,18 +173,13 @@ It loads the exported model and does not retrain at launch. The
 
 | Feature | Definition |
 | --- | --- |
-| `origin_balance_change` | Originator balance before minus balance after the transaction |
-| `destination_balance_change` | Destination balance after minus balance before the transaction |
 | `hour` | `step % 24` |
 | `log_amount` | `log1p(amount)` |
-| `origin_balance_error` | Originator balance before minus transaction amount minus balance after |
-| `destination_balance_error` | Destination balance after minus balance before minus transaction amount |
 | `transaction_to_origin_balance` | Amount divided by originator's starting balance plus one |
-| `account_drained` | One when a positive originator balance falls to zero; otherwise zero |
 
-The balance-error features retain accounting discrepancies as potential
-predictive signals. Customer identifiers and the target are excluded from
-predictive features.
+Post-event balance changes and simulator fraud flags are excluded because they
+may reveal transaction outcomes unavailable when a live decision is made.
+Customer identifiers and the target are excluded from predictive features.
 
 ## Evaluation and interpretation
 
@@ -167,8 +187,34 @@ Precision measures the share of predicted fraud cases that are labelled fraud;
 recall measures the share of fraud cases detected; F1 balances precision and
 recall; ROC-AUC measures ranking across false-positive rates; and PR-AUC
 summarises precision-recall performance and is the primary selection metric
-for the rare fraud class. The confusion matrix and threshold-based class
-predictions use a fixed 0.50 probability threshold for consistent comparisons.
+for the rare fraud class. Brier score is included as a probability scoring
+metric (lower is better), and calibration diagrams compare predicted scores
+with observed fraud rates. Thresholds are selected separately for each pairing
+on the validation period to meet the configured recall floor while maximizing
+precision. The final temporal test window is not used for threshold or model
+selection.
+
+The cost metric is `10 × false negatives + 1 × false positives` by default.
+These are explicit project policy assumptions, not universal industry cost
+ratios; replace them with measured operational costs when available. Precision
+and recall intervals use a bootstrap that resamples whole hourly `step` groups
+to account for within-hour dependence.
+
+The reports group scores as Low (<1%), Medium (1% to <5%), and High (>=5%).
+These are configurable starting bands for triage, not research-established
+fraud cutoffs or validated operational actions; change them with
+`--low-risk-upper-bound` and `--high-risk-lower-bound` when a documented policy
+requires different limits. The reviewed guidance does not define universal
+low/medium/high fraud probability boundaries. It instead recommends choosing
+classification thresholds for the intended use and checking whether predicted
+probabilities are calibrated. SMOTE-based training can particularly affect raw
+probability interpretation, so consult the per-model calibration plots and
+observed fraud rates before treating a score as an actual likelihood.
+
+Research and technical guidance:
+
+- [scikit-learn: Tuning the decision threshold for class prediction](https://scikit-learn.org/stable/modules/classification_threshold.html)
+- [scikit-learn: Probability calibration](https://scikit-learn.org/stable/modules/calibration.html)
 
 This is an academic demonstration using synthetic PaySim data. Model scores
 are not a production payment decision and should not be treated as a substitute

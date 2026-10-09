@@ -21,9 +21,15 @@ def predict_transaction(model, transaction: dict | pd.DataFrame) -> dict:
     features = engineer_features(data)
     if list(features.columns) != FEATURE_COLUMNS:
         raise RuntimeError("Prediction features do not match the training feature schema.")
+    trained_features = getattr(model, "feature_names_in_", None)
+    if trained_features is not None and list(trained_features) != FEATURE_COLUMNS:
+        raise RuntimeError(
+            "The saved model uses an outdated feature schema. Rerun training before scoring."
+        )
     probability = float(model.predict_proba(features)[:, 1][0])
+    threshold = float(getattr(model, "fraud_decision_threshold_", DECISION_THRESHOLD))
     return {
-        "prediction": int(probability >= DECISION_THRESHOLD),
+        "prediction": int(probability >= threshold),
         "fraud_probability": probability,
-        "threshold": DECISION_THRESHOLD,
+        "threshold": threshold,
     }

@@ -1,26 +1,19 @@
 from pathlib import Path
 
 RANDOM_STATE = 42
-TEST_SIZE = 0.20
+DEFAULT_MAX_ROWS = 200_000
 DECISION_THRESHOLD = 0.5
+LOW_FRAUD_PROBABILITY_MAX = 0.01
+HIGH_FRAUD_PROBABILITY_MIN = 0.05
 TARGET_COLUMN = "isFraud"
 CATEGORICAL_FEATURES = ["type"]
 NUMERIC_FEATURES = [
-    "step",
     "amount",
     "oldbalanceOrg",
-    "newbalanceOrig",
     "oldbalanceDest",
-    "newbalanceDest",
-    "isFlaggedFraud",
-    "origin_balance_change",
-    "destination_balance_change",
     "hour",
     "log_amount",
-    "origin_balance_error",
-    "destination_balance_error",
     "transaction_to_origin_balance",
-    "account_drained",
 ]
 FEATURE_COLUMNS = CATEGORICAL_FEATURES + NUMERIC_FEATURES
 REQUIRED_COLUMNS = [
