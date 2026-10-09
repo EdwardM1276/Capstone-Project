@@ -29,6 +29,9 @@ dev = ["pytest>=8.0"]
 package-dir = {"" = "src"}
 packages = ["fraud_detection"]
 
+[tool.poetry]
+packages = [{ include = "fraud_detection", from = "src" }]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
