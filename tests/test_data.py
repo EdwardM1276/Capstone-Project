@@ -76,6 +76,7 @@ def test_streaming_validation_detects_duplicates_across_chunks(
 
     report = json.loads(report_path.read_text(encoding="utf-8"))
     assert report["duplicate_records"] == 2
+    assert report["source"] == "transactions.csv"
     assert report["passed"] is False
 
 

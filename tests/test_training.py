@@ -49,9 +49,13 @@ def test_training_uses_temporal_windows_and_validation_threshold(tmp_path):
         "test": [13, 15],
     }
     assert summary["full_dataset_used"] is True
+    assert summary["workflow_version"] == 2
+    assert summary["hyperparameter_tuning"]["selection_metric"] == "inner_chronological_pr_auc"
+    assert summary["hyperparameter_tuning"]["selected_parameters"]
     assert results.iloc[0]["validation_recall"] >= 0.90
     assert results.iloc[0]["threshold"] != 0.5
     assert (tmp_path / "models" / "best_model.joblib").is_file()
+    assert (tmp_path / "figures" / "calibration_class_weight.png").is_file()
     model = load_best_model(tmp_path / "models" / "best_model.joblib")
     prediction = predict_transaction(
         model,
@@ -85,3 +89,20 @@ def test_prediction_rejects_saved_model_with_old_feature_schema():
         assert "outdated feature schema" in str(error)
     else:
         raise AssertionError("Expected the old model feature schema to be rejected.")
+
+
+def test_prediction_requires_a_single_transaction():
+    transaction = {
+        "step": [1, 2],
+        "type": ["TRANSFER", "PAYMENT"],
+        "amount": [100.0, 200.0],
+        "oldbalanceOrg": [500.0, 600.0],
+        "oldbalanceDest": [0.0, 100.0],
+    }
+
+    try:
+        predict_transaction(object(), pd.DataFrame(transaction))
+    except ValueError as error:
+        assert "exactly one transaction" in str(error)
+    else:
+        raise AssertionError("Expected multi-row scoring input to be rejected.")

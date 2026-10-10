@@ -39,3 +39,18 @@ def test_feature_engineering_does_not_require_post_transaction_fields():
     features = engineer_features(data)
 
     assert len(features) == 1
+
+
+def test_feature_engineering_rejects_invalid_scoring_values():
+    data = pd.DataFrame(
+        {
+            "step": [1],
+            "type": ["TRANSFER"],
+            "amount": [-1.0],
+            "oldbalanceOrg": [20.0],
+            "oldbalanceDest": [0.0],
+        }
+    )
+
+    with np.testing.assert_raises_regex(ValueError, "non-negative"):
+        engineer_features(data)
