@@ -233,7 +233,7 @@ def validate_csv(path: str | Path, report_path: str | Path | None = None) -> dic
 
     source_stat = source.stat()
     report = {
-        "source": str(source),
+        "source": source.name,
         "source_size_bytes": source_stat.st_size,
         "source_modified_ns": source_stat.st_mtime_ns,
         "row_count": row_count,

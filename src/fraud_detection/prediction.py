@@ -18,6 +18,8 @@ def load_best_model(path: str | Path = MODEL_DIR / "best_model.joblib"):
 
 def predict_transaction(model, transaction: dict | pd.DataFrame) -> dict:
     data = transaction if isinstance(transaction, pd.DataFrame) else pd.DataFrame([transaction])
+    if len(data) != 1:
+        raise ValueError("predict_transaction accepts exactly one transaction.")
     features = engineer_features(data)
     if list(features.columns) != FEATURE_COLUMNS:
         raise RuntimeError("Prediction features do not match the training feature schema.")

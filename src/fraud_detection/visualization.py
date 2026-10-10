@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
+from sklearn.calibration import calibration_curve
 
 sns.set_theme(
     style="whitegrid",
@@ -149,8 +150,16 @@ def save_model_comparison_figures(
                     capsize=2,
                     zorder=4,
                 )
-        ax.set_title(title, loc="left", weight="bold", fontsize=13)
-        ax.text(0, 1.01, note, transform=ax.transAxes, fontsize=10, color="#43566f")
+        ax.set_title(title, loc="left", weight="bold", fontsize=13, pad=24)
+        ax.text(
+            0,
+            1.005,
+            note,
+            transform=ax.transAxes,
+            fontsize=9,
+            color="#43566f",
+            va="bottom",
+        )
         ax.set_xticks(x_positions)
         ax.set_xticklabels([short_names[item] for item in model_order], fontsize=10)
         ax.tick_params(axis="y", labelsize=9)
@@ -179,9 +188,9 @@ def save_model_comparison_figures(
         "Feedforward Neural Network": "D",
         "LightGBM": "P",
     }
-    fig, axes = plt.subplots(1, 2, figsize=(17, 7))
-    axes[0].set_title("Ranking quality and scoring speed", loc="left", weight="bold", fontsize=14)
-    axes[1].set_title("Fraud capture and weighted error cost", loc="left", weight="bold", fontsize=14)
+    fig, axes = plt.subplots(1, 2, figsize=(17, 9))
+    axes[0].set_title("Ranking quality and scoring speed", loc="left", weight="bold", fontsize=18)
+    axes[1].set_title("Fraud capture and weighted error cost", loc="left", weight="bold", fontsize=18)
     costs = results["cost_per_1000_transactions"].to_numpy(dtype=float)
     recalls = results["recall"].to_numpy(dtype=float)
     cost_frontier = np.ones(len(results), dtype=bool)
@@ -203,15 +212,8 @@ def save_model_comparison_figures(
             marker=marker,
             edgecolor=edge_color,
             linewidth=1.6,
-            s=100,
+            s=175,
             zorder=3,
-        )
-        axes[0].annotate(
-            short_names.get(row.model, row.model).replace("\n", " "),
-            (row.prediction_rows_per_second, row.pr_auc),
-            xytext=(4, 4),
-            textcoords="offset points",
-            fontsize=9,
         )
         axes[1].scatter(
             costs[index],
@@ -220,20 +222,15 @@ def save_model_comparison_figures(
             marker=marker,
             edgecolor="#10233f" if cost_frontier[index] else "#ffffff",
             linewidth=1.6,
-            s=100,
+            s=175,
             zorder=3,
         )
-        axes[1].annotate(
-            short_names.get(row.model, row.model).replace("\n", " "),
-            (costs[index], row.recall),
-            xytext=(4, 4),
-            textcoords="offset points",
-            fontsize=9,
-        )
-    axes[0].set_xlabel("Final test transactions scored per second")
-    axes[0].set_ylabel("Final test PR-AUC")
-    axes[1].set_xlabel("Weighted cost per 1,000 final test transactions")
-    axes[1].set_ylabel("Final test recall")
+    axes[0].set_xlabel("Final test transactions scored per second", fontsize=16)
+    axes[0].set_ylabel("Final test PR-AUC", fontsize=16)
+    axes[1].set_xlabel("Weighted cost per 1,000 final test transactions", fontsize=16)
+    axes[1].set_ylabel("Final test recall", fontsize=16)
+    for axis in axes:
+        axis.tick_params(axis="both", labelsize=14)
     axes[0].grid(alpha=0.65)
     axes[1].grid(alpha=0.65)
 
@@ -264,12 +261,13 @@ def save_model_comparison_figures(
     fig.legend(
         handles=strategy_handles + model_handles,
         loc="lower center",
-        ncol=min(8, len(strategy_handles) + len(model_handles)),
+        ncol=min(4, len(strategy_handles) + len(model_handles)),
         frameon=False,
         bbox_to_anchor=(0.5, -0.015),
+        fontsize=12,
     )
-    fig.suptitle("Pareto analysis | Quality, efficiency, recall, and cost", x=0.06, ha="left", weight="bold", fontsize=18)
-    fig.tight_layout(rect=(0, 0.08, 1, 0.93))
+    fig.suptitle("Pareto analysis | Quality, efficiency, recall, and cost", x=0.06, ha="left", weight="bold", fontsize=22)
+    fig.tight_layout(rect=(0, 0.13, 1, 0.9))
     fig.savefig(destination / "pareto_dashboard.png", dpi=180, bbox_inches="tight")
     plt.close(fig)
 

@@ -20,6 +20,27 @@ MODEL_NAMES = (
 )
 
 
+def hyperparameter_candidates(name: str) -> tuple[dict, ...]:
+    """Small, fixed search spaces that keep the temporal tuning run affordable."""
+    candidates = {
+        "Logistic Regression": ({"C": 0.1}, {"C": 1.0}),
+        "Random Forest": (
+            {"min_samples_leaf": 1},
+            {"min_samples_leaf": 2},
+        ),
+        "XGBoost": ({"max_depth": 4}, {"max_depth": 6}),
+        "Feedforward Neural Network": (
+            {"hidden_layer_sizes": (32,)},
+            {"hidden_layer_sizes": (64, 32)},
+        ),
+        "LightGBM": ({"num_leaves": 15}, {"num_leaves": 31}),
+    }
+    try:
+        return candidates[name]
+    except KeyError as error:
+        raise ValueError(f"Unknown model {name!r}; choose from {MODEL_NAMES}.") from error
+
+
 def make_sampler(strategy: str):
     if strategy == "class_weight":
         return None
@@ -35,7 +56,13 @@ def make_sampler(strategy: str):
     )
 
 
-def make_estimator(name: str, strategy: str, positive_weight: float):
+def make_estimator(
+    name: str,
+    strategy: str,
+    positive_weight: float,
+    parameters: dict | None = None,
+):
+    parameters = parameters or {}
     use_class_weight = strategy == "class_weight"
     if name == "Logistic Regression":
         return LogisticRegression(
@@ -43,33 +70,34 @@ def make_estimator(name: str, strategy: str, positive_weight: float):
             max_iter=500,
             random_state=RANDOM_STATE,
             solver="lbfgs",
+            **parameters,
         )
     if name == "Random Forest":
         return RandomForestClassifier(
             class_weight="balanced_subsample" if use_class_weight else None,
             n_estimators=200,
-            min_samples_leaf=2,
             n_jobs=-1,
             random_state=RANDOM_STATE,
+            **parameters,
         )
     if name == "XGBoost":
         return XGBClassifier(
             eval_metric="logloss",
             learning_rate=0.1,
-            max_depth=6,
             n_estimators=200,
             n_jobs=-1,
             random_state=RANDOM_STATE,
             scale_pos_weight=positive_weight if use_class_weight else 1,
             tree_method="hist",
+            **parameters,
         )
     if name == "Feedforward Neural Network":
         return MLPClassifier(
             early_stopping=True,
-            hidden_layer_sizes=(64, 32),
             learning_rate_init=0.001,
             max_iter=150,
             random_state=RANDOM_STATE,
+            **parameters,
         )
     if name == "LightGBM":
         return LGBMClassifier(
@@ -79,17 +107,25 @@ def make_estimator(name: str, strategy: str, positive_weight: float):
             n_jobs=-1,
             random_state=RANDOM_STATE,
             verbosity=-1,
+            **parameters,
         )
     raise ValueError(f"Unknown model {name!r}; choose from {MODEL_NAMES}.")
 
 
-def make_model_pipeline(name: str, strategy: str, positive_weight: float) -> Pipeline:
+def make_model_pipeline(
+    name: str,
+    strategy: str,
+    positive_weight: float,
+    parameters: dict | None = None,
+) -> Pipeline:
     scale = name in ("Logistic Regression", "Feedforward Neural Network")
     steps: list[tuple[str, object]] = [("preprocessor", make_preprocessor(scale))]
     sampler = make_sampler(strategy)
     if sampler is not None:
         steps.append(("sampler", sampler))
-    steps.append(("classifier", make_estimator(name, strategy, positive_weight)))
+    steps.append(
+        ("classifier", make_estimator(name, strategy, positive_weight, parameters))
+    )
     return Pipeline(steps)
 
 

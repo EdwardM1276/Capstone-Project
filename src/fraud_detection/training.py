@@ -1,14 +1,17 @@
 import json
+import platform
 import re
 import shutil
 import time
 import uuid
 from datetime import datetime, timezone
+from importlib.metadata import version
 from pathlib import Path
 
 import joblib
 import numpy as np
 import pandas as pd
+from sklearn.metrics import average_precision_score
 
 from fraud_detection.config import (
     DEFAULT_DATA_PATH,
@@ -20,6 +23,7 @@ from fraud_detection.config import (
     RANDOM_STATE,
     REPORT_DIR,
     TARGET_COLUMN,
+    TRAINING_WORKFLOW_VERSION,
 )
 from fraud_detection.data import load_dataset, validate_csv
 from fraud_detection.evaluation import (
@@ -39,15 +43,61 @@ from fraud_detection.models import (
     IMBALANCE_STRATEGIES,
     MODEL_NAMES,
     fit_kwargs,
+    hyperparameter_candidates,
     make_model_pipeline,
 )
 from fraud_detection.visualization import (
     save_class_distribution,
+    save_calibration_figures,
     save_model_comparison_figures,
 )
 
 DEFAULT_MODELS = list(MODEL_NAMES)
 DEFAULT_STRATEGIES = list(IMBALANCE_STRATEGIES)
+
+
+def _tune_hyperparameters(
+    model_name: str,
+    strategy: str,
+    features: pd.DataFrame,
+    labels: pd.Series,
+    steps: np.ndarray,
+) -> tuple[dict, float, float]:
+    """Choose parameters on a later slice of the training window by PR-AUC."""
+    unique_steps = np.unique(steps)
+    if len(unique_steps) < 3:
+        raise ValueError("At least three training time steps are required for tuning.")
+    split_index = min(max(int(np.ceil(len(unique_steps) * 0.8)), 1), len(unique_steps) - 1)
+    tuning_start = unique_steps[split_index]
+    fit_indices = np.flatnonzero(steps < tuning_start)
+    tuning_indices = np.flatnonzero(steps >= tuning_start)
+    y_fit, y_tuning = labels.iloc[fit_indices], labels.iloc[tuning_indices]
+    if y_fit.nunique() < 2 or y_tuning.nunique() < 2:
+        raise ValueError(
+            "The inner chronological tuning split must contain both classes in "
+            "its fit and tuning windows. Increase the modelling sample size."
+        )
+
+    positive_weight = float((y_fit == 0).sum() / (y_fit == 1).sum())
+    best_score = -np.inf
+    best_parameters = None
+    started = time.perf_counter()
+    for parameters in hyperparameter_candidates(model_name):
+        candidate = make_model_pipeline(
+            model_name, strategy, positive_weight, parameters
+        )
+        candidate.fit(
+            features.iloc[fit_indices],
+            y_fit,
+            **fit_kwargs(model_name, strategy, y_fit),
+        )
+        scores = candidate.predict_proba(features.iloc[tuning_indices])[:, 1]
+        candidate_score = float(average_precision_score(y_tuning, scores))
+        if candidate_score > best_score:
+            best_score = candidate_score
+            best_parameters = parameters
+    tuning_seconds = time.perf_counter() - started
+    return dict(best_parameters), best_score, tuning_seconds
 
 
 def run_training(
@@ -91,7 +141,15 @@ def run_training(
     started_at = datetime.now(timezone.utc).isoformat()
     run_status_path = reports_path / "run_status.json"
     run_status_path.write_text(
-        json.dumps({"run_id": run_id, "status": "running", "started_at": started_at}, indent=2),
+        json.dumps(
+            {
+                "run_id": run_id,
+                "status": "running",
+                "started_at": started_at,
+                "workflow_version": TRAINING_WORKFLOW_VERSION,
+            },
+            indent=2,
+        ),
         encoding="utf-8",
     )
 
@@ -103,7 +161,7 @@ def run_training(
         source_stat = source_path.stat()
         if (
             cached_quality.get("passed") is True
-            and cached_quality.get("source") == str(source_path)
+            and cached_quality.get("source") == source_path.name
             and cached_quality.get("source_size_bytes") == source_stat.st_size
             and cached_quality.get("source_modified_ns") == source_stat.st_mtime_ns
         ):
@@ -122,6 +180,11 @@ def run_training(
     X_validation, y_validation = X.iloc[validation_indices], y.iloc[validation_indices]
     X_test, y_test = X.iloc[test_indices], y.iloc[test_indices]
     steps_test = steps[test_indices]
+    training_steps = np.unique(steps[train_indices])
+    tuning_boundary_index = min(
+        max(int(np.ceil(len(training_steps) * 0.8)), 1), len(training_steps) - 1
+    )
+    tuning_boundary_step = training_steps[tuning_boundary_index]
     for partition_name, labels in (
         ("training", y_train),
         ("validation", y_validation),
@@ -135,16 +198,24 @@ def run_training(
                 f"The chronological {partition_name} partition has only {fraud_count} "
                 "fraud cases; use more rows before drawing reliable conclusions."
             )
-    positive_weight = float((y_train == 0).sum() / (y_train == 1).sum())
     result_rows = []
     probability_band_rows = []
     model_files = {}
+    test_predictions = {}
 
     for strategy in imbalance_strategies:
         for model_name in models:
             key = f"{model_name} [{strategy}]"
             print(f"Training {key}...")
-            pipeline = make_model_pipeline(model_name, strategy, positive_weight)
+            parameters, tuning_pr_auc, tuning_seconds = _tune_hyperparameters(
+                model_name, strategy, X_train, y_train, steps[train_indices]
+            )
+            positive_weight = float(
+                (y_train == 0).sum() / (y_train == 1).sum()
+            )
+            pipeline = make_model_pipeline(
+                model_name, strategy, positive_weight, parameters
+            )
             sample_kwargs = fit_kwargs(model_name, strategy, y_train)
             fit_started = time.perf_counter()
             pipeline.fit(X_train, y_train, **sample_kwargs)
@@ -167,6 +238,9 @@ def run_training(
             predict_started = time.perf_counter()
             probabilities = pipeline.predict_proba(X_test)[:, 1]
             predict_seconds = time.perf_counter() - predict_started
+            test_predictions[f"{model_name} [{strategy}]"] = {
+                "probabilities": probabilities,
+            }
             labels, metrics = evaluate_predictions(
                 y_test, probabilities, threshold
             )
@@ -222,6 +296,9 @@ def run_training(
                     "validation_rows": int(len(y_validation)),
                     "validation_fraud_rows": int(y_validation.sum()),
                     "fit_seconds": fit_seconds,
+                    "tuning_seconds": tuning_seconds,
+                    "tuning_pr_auc": tuning_pr_auc,
+                    "hyperparameters": json.dumps(parameters, sort_keys=True),
                     "predict_seconds": predict_seconds,
                     "prediction_rows_per_second": (
                         float(len(y_test) / predict_seconds)
@@ -264,18 +341,27 @@ def run_training(
     probability_bands = pd.DataFrame(probability_band_rows)
     probability_bands.to_csv(reports_path / "probability_bands.csv", index=False)
     save_model_comparison_figures(results, figures_path, probability_bands)
+    save_calibration_figures(y_test, test_predictions, figures_path)
 
     best_row = results.iloc[0]
     best_key = f"{best_row['model']} [{best_row['imbalance_strategy']}]"
     best_model_path = output_path / "best_model.joblib"
     shutil.copyfile(model_files[best_key], best_model_path)
     metadata = {
+        "workflow_version": TRAINING_WORKFLOW_VERSION,
         "run_id": run_id,
         "started_at": started_at,
         "completed_at": datetime.now(timezone.utc).isoformat(),
         "model": str(best_row["model"]),
         "imbalance_strategy": str(best_row["imbalance_strategy"]),
         "selection_metric": "validation_weighted_cost_at_recall_target",
+        "hyperparameter_tuning": {
+            "selection_metric": "inner_chronological_pr_auc",
+            "fit_fraction_of_training_steps": 0.8,
+            "tuning_fraction_of_training_steps": 0.2,
+            "selected_parameters": json.loads(str(best_row["hyperparameters"])),
+            "inner_tuning_pr_auc": float(best_row["tuning_pr_auc"]),
+        },
         "metrics": {
             metric: float(best_row[metric])
             for metric in (
@@ -286,6 +372,10 @@ def run_training(
         "random_state": RANDOM_STATE,
         "split_strategy": "chronological_by_step",
         "split_fractions": {"training": 0.60, "validation": 0.20, "test": 0.20},
+        "inner_tuning_step_ranges": {
+            "fit": [int(training_steps[0]), int(training_steps[tuning_boundary_index - 1])],
+            "tuning": [int(tuning_boundary_step), int(training_steps[-1])],
+        },
         "split_step_ranges": {
             "training": [int(steps[train_indices].min()), int(steps[train_indices].max())],
             "validation": [
@@ -306,6 +396,21 @@ def run_training(
         },
         "source_rows": int(quality["row_count"]),
         "sampled_rows": int(len(data)),
+        "environment": {
+            "python": platform.python_version(),
+            "packages": {
+                package: version(package)
+                for package in (
+                    "numpy",
+                    "pandas",
+                    "scikit-learn",
+                    "imbalanced-learn",
+                    "xgboost",
+                    "lightgbm",
+                    "streamlit",
+                )
+            },
+        },
         "full_dataset_used": (
             max_rows is None or max_rows <= 0 or len(data) >= quality["row_count"]
         ),
@@ -338,6 +443,7 @@ def run_training(
         "performance_dashboard.png",
         "pareto_dashboard.png",
         "probability_band_risk_map.png",
+        *(f"calibration_{strategy}.png" for strategy in imbalance_strategies),
     }
     for obsolete_figure in figures_path.glob("*.png"):
         if obsolete_figure.name not in current_figures:
@@ -349,6 +455,7 @@ def run_training(
                 "status": "complete",
                 "started_at": started_at,
                 "completed_at": metadata["completed_at"],
+                "workflow_version": TRAINING_WORKFLOW_VERSION,
             },
             indent=2,
         ),
