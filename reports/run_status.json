@@ -1,6 +1,7 @@
 {
-  "run_id": "a0c5812936ac",
+  "run_id": "4b0b05a1c9a6",
   "status": "complete",
-  "started_at": "2026-10-09T17:37:45.311033+00:00",
-  "completed_at": "2026-10-09T17:41:27.445202+00:00"
+  "started_at": "2026-10-10T11:19:06.829687+00:00",
+  "completed_at": "2026-10-10T11:31:54.583837+00:00",
+  "workflow_version": 2
 }

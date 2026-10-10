@@ -1,19 +1,29 @@
 {
-  "run_id": "a0c5812936ac",
-  "started_at": "2026-10-09T17:37:45.311033+00:00",
-  "completed_at": "2026-10-09T17:41:27.445202+00:00",
-  "model": "XGBoost",
-  "imbalance_strategy": "class_weight",
+  "workflow_version": 2,
+  "run_id": "4b0b05a1c9a6",
+  "started_at": "2026-10-10T11:19:06.829687+00:00",
+  "completed_at": "2026-10-10T11:31:54.583837+00:00",
+  "model": "Random Forest",
+  "imbalance_strategy": "smote",
   "selection_metric": "validation_weighted_cost_at_recall_target",
-  "metrics": {
-    "precision": 0.9333333333333333,
-    "recall": 0.9333333333333333,
-    "f1": 0.9333333333333333,
-    "roc_auc": 0.9998647277646263,
-    "pr_auc": 0.9861986968734021,
-    "brier_score": 0.0015538180014118552
+  "hyperparameter_tuning": {
+    "selection_metric": "inner_chronological_pr_auc",
+    "fit_fraction_of_training_steps": 0.8,
+    "tuning_fraction_of_training_steps": 0.2,
+    "selected_parameters": {
+      "min_samples_leaf": 1
+    },
+    "inner_tuning_pr_auc": 0.9949290060851927
   },
-  "threshold": 0.06692970544099808,
+  "metrics": {
+    "precision": 1.0,
+    "recall": 0.9666666666666667,
+    "f1": 0.9830508474576272,
+    "roc_auc": 1.0,
+    "pr_auc": 0.9999999999999999,
+    "brier_score": 8.133578841647137e-05
+  },
+  "threshold": 0.795,
   "random_state": 42,
   "split_strategy": "chronological_by_step",
   "split_fractions": {
@@ -41,9 +51,9 @@
     "false_positive": 1.0
   },
   "validation_metrics": {
-    "precision": 0.9411764705882353,
+    "precision": 1.0,
     "recall": 0.9230769230769231,
-    "weighted_cost": 43.0
+    "weighted_cost": 40.0
   },
   "source_rows": 6362620,
   "sampled_rows": 200000,
@@ -71,5 +81,27 @@
   "validation_fraud_rows": 52,
   "test_rows": 5974,
   "fraud_test_rows": 60,
-  "best_model_file": "best_model.joblib"
+  "best_model_file": "best_model.joblib",
+  "environment": {
+    "python": "3.13.3",
+    "packages": {
+      "numpy": "2.2.6",
+      "pandas": "2.2.3",
+      "scikit-learn": "1.8.0",
+      "imbalanced-learn": "0.14.2",
+      "xgboost": "3.4.1",
+      "lightgbm": "4.7.0",
+      "streamlit": "1.58.0"
+    }
+  },
+  "inner_tuning_step_ranges": {
+    "fit": [
+      1,
+      326
+    ],
+    "tuning": [
+      327,
+      407
+    ]
+  }
 }
