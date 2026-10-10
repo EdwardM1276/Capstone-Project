@@ -16,3 +16,4 @@ data/processed/*
 .coverage
 htmlcov/
 .pytest_cache/
+work/

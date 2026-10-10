@@ -52,11 +52,12 @@ step,type,amount,nameOrig,oldbalanceOrg,newbalanceOrig,nameDest,
 oldbalanceDest,newbalanceDest,isFraud,isFlaggedFraud
 ```
 
-The supplied CSV is about 493 MB and is excluded from Git to keep the
-repository within normal hosting limits. The pipeline reads the dataset from
-the path above, validates the complete file in chunks, and does not use the
-sender or recipient identifiers as model inputs. If the file has a different
-name or location, pass it with `--input`.
+The CSV is about 493 MB and is excluded from Git to keep the repository within
+normal hosting limits. Download `PS_20174392719_1491204439457_log.csv` from
+[Kaggle's Synthetic Financial Datasets for Fraud Detection](https://www.kaggle.com/datasets/ealaxi/paysim1),
+then place it at `data/raw/paysim.csv`. The pipeline validates the complete
+file in chunks and excludes sender and recipient identifiers from predictive
+features. If the file has a different name or location, pass it with `--input`.
 
 ## Reproducible workflow
 
@@ -90,13 +91,17 @@ on a machine with sufficient memory:
 python -m fraud_detection.cli train --max-rows 0
 ```
 
-All 15 pairings receive the same sampled rows, chronological partitions, and
-fixed baseline configurations. Partitions are made by complete `step` groups:
+All 15 pairings receive the same sampled rows and chronological partitions.
+For each model and imbalance strategy, a small documented parameter search
+selects among two configurations using PR-AUC on a later time window inside
+the training period. The chosen configuration is refit on the full training
+window. Partitions are made by complete `step` groups:
 the earliest 60% of distinct hourly steps for fitting, the next 20% of steps
 for threshold selection, and the latest 20% of steps for final testing.
 Transaction volume varies substantially by hour, so row counts need not match
-these time percentages. Resampling is fit only inside the training
-pipeline. No test metric is used to select the winning pairing. Each validation
+these time percentages. Resampling is fit only inside each training pipeline.
+Validation and test rows are not used to fit preprocessing or resampling. No
+test metric is used to select the winning pairing. Each validation
 threshold is chosen to maximize precision subject to at least 90% recall; the
 winner is selected by validation cost, using 10 per false negative and 1 per
 false positive. Those policy values are configurable. The 90% recall floor is
@@ -105,19 +110,21 @@ against measured review capacity and fraud-loss costs. Per-pair fit time and
 test throughput are reported, with the PR-AUC/throughput frontier computed on
 the final period for comparison only.
 
-The 200,000-row local cap is a conservative working estimate for this 7.7 GiB
-machine, based on the previously generated 100,000-row 15-pair run; it is not a
-guarantee if other applications consume memory. Close memory-heavy applications
-before running. At least 30 fraud cases are required in both validation and test
+The 200,000-row local cap is a conservative working estimate for a 7.7 GiB
+machine, and is not a guarantee if other applications consume memory. Close
+memory-heavy applications before running. At least 30 fraud cases are required in both validation and test
 windows; the pipeline stops if the sampled timeline cannot meet that minimum.
+The audited default run with the two-candidate inner search took about 13
+minutes; runtime varies by hardware and package versions. Close memory-heavy
+applications before running.
 Full-data SMOTE can synthesize millions of rows, so `--max-rows 0` is intended
 for a higher-memory machine. The sample remains a pilot, not a substitute for
 full-data conclusions.
 
 The sample is selected reproducibly and stratified by label; temporal
 boundaries are applied afterward by `step`, keeping each hour in exactly one
-partition. The full input is validated even when modeling a sample. Models use
-the same fixed baseline settings, avoiding an asymmetric search budget.
+partition. The full input is validated even when modeling a sample. Every
+pairing receives the same two-candidate search budget.
 
 The workflow trains Logistic Regression, Random Forest, XGBoost, a
 scikit-learn feedforward neural network, and LightGBM. Numeric inputs are
@@ -135,24 +142,29 @@ Training writes:
 
 - `reports/model_comparison.csv` with precision, recall, F1, ROC-AUC, PR-AUC,
   Brier score, validation threshold metrics, weighted false-positive/negative
-  cost, hourly-bootstrap confidence intervals for precision/recall/PR-AUC,
-  fit/prediction duration, scoring
-  throughput, and Pareto status for each pairing.
+  cost, inner tuning PR-AUC, chosen hyperparameters, tuning and fit/prediction
+  duration, hourly-bootstrap confidence intervals for precision/recall/PR-AUC,
+  scoring throughput, and Pareto status for each pairing.
 - `reports/imbalance_strategy_comparison.csv` with average model performance
   and runtime for each imbalance strategy.
 - `reports/probability_bands.csv` with the number of transactions and observed
   fraud rate in each model's low/medium/high probability band.
-- `reports/data_quality.json` and `reports/training_summary.json`.
+- `reports/data_quality.json` and `reports/training_summary.json`; the summary
+  records workflow version, exact Python and key package versions, tuning
+  parameters, and time-step ranges for each split.
 - A six-metric grouped performance dashboard, two-panel Pareto dashboard,
   algorithm-by-treatment PR-AUC heatmap, high-score observed-risk map, and class
-  distribution in `reports/figures/`. Obsolete generated PNGs are removed after
+  distribution and per-treatment probability calibration diagrams in
+  `reports/figures/`. Calibration plots use the final test period only for
+  reporting and do not affect model selection. Obsolete generated PNGs are removed after
   a successful run so the figures directory represents only the latest run.
 - Individual fitted estimators and `models/best_model.joblib`, selected for
   application use, plus `models/best_model.json`.
 
-The included comparison files and deployment model predate this methodology
-update. Rerun training before using them. Check `reports/training_summary.json`
-for the sampled row count, time boundaries, threshold policy, and fraud counts.
+Comparison files and deployment models are generated artifacts tied to a
+specific data file and workflow version. Rerun training after changing the
+data or methodology. Check `reports/training_summary.json` for the workflow
+version, sampled row count, time boundaries, threshold policy, and fraud counts.
 
 ### 4. Run the application
 
@@ -186,13 +198,16 @@ Customer identifiers and the target are excluded from predictive features.
 Precision measures the share of predicted fraud cases that are labelled fraud;
 recall measures the share of fraud cases detected; F1 balances precision and
 recall; ROC-AUC measures ranking across false-positive rates; and PR-AUC
-summarises precision-recall performance and is the primary selection metric
-for the rare fraud class. Brier score is included as a probability scoring
+summarises precision-recall performance, which is useful for the rare fraud
+class. A small inner chronological search within the training period selects
+hyperparameters by PR-AUC. Brier score is included as a probability scoring
 metric (lower is better), and calibration diagrams compare predicted scores
 with observed fraud rates. Thresholds are selected separately for each pairing
-on the validation period to meet the configured recall floor while maximizing
-precision. The final temporal test window is not used for threshold or model
-selection.
+on the later validation period to meet the configured recall floor while
+maximizing precision. The pairing is selected by validation weighted error
+cost, with validation precision as a tie-breaker. The final temporal test
+window is reserved for reporting and is not used for tuning, threshold, or
+model selection.
 
 The cost metric is `10 × false negatives + 1 × false positives` by default.
 These are explicit project policy assumptions, not universal industry cost
