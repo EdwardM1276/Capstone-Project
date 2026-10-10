@@ -4,7 +4,13 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
-from fraud_detection.config import DEFAULT_MAX_ROWS, FIGURE_DIR, MODEL_DIR, REPORT_DIR
+from fraud_detection.config import (
+    DEFAULT_MAX_ROWS,
+    FIGURE_DIR,
+    MODEL_DIR,
+    REPORT_DIR,
+    TRAINING_WORKFLOW_VERSION,
+)
 from fraud_detection.models import MODEL_NAMES
 from fraud_detection.prediction import load_best_model, predict_transaction
 
@@ -29,12 +35,18 @@ CURRENT_RESULT_COLUMNS = {
     "cost_per_1000_transactions",
     "prediction_rows_per_second",
     "pareto_efficient",
+    "test_rows",
+    "fraud_test_rows",
+    "tuning_pr_auc",
+    "tuning_seconds",
+    "hyperparameters",
 }
 
 st.set_page_config(
     page_title="PaySim | Fraud Review",
     page_icon=None,
     layout="wide",
+    initial_sidebar_state="expanded",
 )
 
 st.markdown(
@@ -80,6 +92,21 @@ st.markdown(
         fill: #155eef !important;
         stroke: #155eef !important;
     }
+    [data-testid="stExpandSidebarButton"],
+    [data-testid="stExpandSidebarButton"] * {
+        color: #155eef !important;
+        fill: #155eef !important;
+        stroke: #155eef !important;
+        opacity: 1 !important;
+        visibility: visible !important;
+    }
+    [data-testid="stExpandSidebarButton"] {
+        width: 2.35rem !important;
+        height: 2.35rem !important;
+        border: 1px solid #155eef !important;
+        border-radius: 999px !important;
+        background: #eaf0ff !important;
+    }
     [data-testid="stSidebarCollapseButton"]:hover svg,
     [data-testid="stSidebarCollapseButton"]:focus svg,
     [data-testid="stSidebarCollapseButton"]:active svg,
@@ -93,12 +120,109 @@ st.markdown(
         fill: #155eef !important;
         stroke: #155eef !important;
     }
+    [data-testid="stSidebarCollapseButton"],
+    [data-testid="stSidebarCollapsedControl"],
+    [data-testid="stExpandSidebarButton"],
+    button[aria-label="Close sidebar"],
+    button[aria-label="Open sidebar"] {
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        min-width: 2.25rem !important;
+        min-height: 2.25rem !important;
+        border: 1px solid #155eef !important;
+        border-radius: 999px !important;
+        background: #eaf0ff !important;
+        color: #155eef !important;
+        opacity: 1 !important;
+        visibility: visible !important;
+    }
+    [data-testid="stSidebarCollapseButton"] svg,
+    [data-testid="stSidebarCollapsedControl"] svg,
+    [data-testid="stExpandSidebarButton"] svg,
+    button[aria-label="Close sidebar"] svg,
+    button[aria-label="Open sidebar"] svg {
+        width: 1.25rem !important;
+        height: 1.25rem !important;
+        color: #155eef !important;
+        fill: #155eef !important;
+        stroke: #155eef !important;
+        opacity: 1 !important;
+        visibility: visible !important;
+    }
+    [data-testid="stSidebarCollapseButton"]:hover,
+    [data-testid="stSidebarCollapsedControl"]:hover,
+    button[aria-label="Close sidebar"]:hover,
+    button[aria-label="Open sidebar"]:hover,
+    [data-testid="stSidebarCollapseButton"]:focus-visible,
+    [data-testid="stSidebarCollapsedControl"]:focus-visible,
+    button[aria-label="Close sidebar"]:focus-visible,
+    button[aria-label="Open sidebar"]:focus-visible {
+        background: #d5e2ff !important;
+        outline: 2px solid #10233f !important;
+        outline-offset: 2px !important;
+    }
     [data-testid="stSelectbox"] [data-baseweb="select"] > div {
         background: #ffffff !important;
         border-color: #64748b !important;
     }
     [data-testid="stSelectbox"] [data-baseweb="select"] svg {
         fill: #000000 !important;
+    }
+    [data-testid="stWidgetLabel"],
+    [data-testid="stWidgetLabel"] p,
+    [data-testid="stNumberInput"] label,
+    [data-testid="stSelectbox"] label,
+    [data-testid="stForm"] label {
+        color: #10233f !important;
+        opacity: 1 !important;
+        font-weight: 600 !important;
+    }
+    [data-testid="stNumberInput"] input,
+    [data-testid="stTextInput"] input,
+    [data-testid="stSelectbox"] [data-baseweb="select"] > div {
+        color: #10233f !important;
+        background-color: #ffffff !important;
+        -webkit-text-fill-color: #10233f !important;
+        border-color: #64748b !important;
+    }
+    [data-testid="stNumberInputContainer"] [data-baseweb="input"],
+    [data-testid="stNumberInputContainer"] [data-baseweb="base-input"] {
+        background: #ffffff !important;
+        border-color: #64748b !important;
+    }
+    [data-testid="stNumberInputStepDown"],
+    [data-testid="stNumberInputStepUp"] {
+        color: #10233f !important;
+        background: #eaf0ff !important;
+        border-left: 1px solid #cbd7e5 !important;
+    }
+    [data-testid="stNumberInputStepDown"] svg,
+    [data-testid="stNumberInputStepUp"] svg {
+        color: #10233f !important;
+        fill: #10233f !important;
+    }
+    [data-testid="stNumberInputStepDown"]:hover,
+    [data-testid="stNumberInputStepUp"]:hover {
+        background: #d5e2ff !important;
+    }
+    [data-testid="stSelectbox"] [data-baseweb="select"] span,
+    [data-testid="stSelectbox"] [data-baseweb="select"] input {
+        color: #10233f !important;
+        -webkit-text-fill-color: #10233f !important;
+    }
+    [data-baseweb="popover"],
+    [data-baseweb="popover"] ul,
+    [data-baseweb="popover"] li,
+    [data-baseweb="popover"] [role="option"] {
+        color: #10233f !important;
+        background-color: #ffffff !important;
+        opacity: 1 !important;
+    }
+    [data-baseweb="popover"] [role="option"]:hover,
+    [data-baseweb="popover"] [role="option"][aria-selected="true"] {
+        color: #10233f !important;
+        background-color: #eaf0ff !important;
     }
     html, body, [class*="css"] {
         color: var(--ink);
@@ -163,6 +287,8 @@ def _current_results() -> tuple[pd.DataFrame, dict] | None:
         status.get("status") != "complete"
         or status.get("run_id") != summary.get("run_id")
         or summary.get("split_strategy") != "chronological_by_step"
+        or summary.get("workflow_version") != TRAINING_WORKFLOW_VERSION
+        or status.get("workflow_version") != TRAINING_WORKFLOW_VERSION
     ):
         return None
     try:
@@ -173,11 +299,9 @@ def _current_results() -> tuple[pd.DataFrame, dict] | None:
         return None
     if results.empty or not results["imbalance_strategy"].isin(STRATEGY_LABELS).all():
         return None
-    if len(results) != len(MODEL_NAMES) * len(STRATEGY_LABELS):
+    if not set(results["model"]).issubset(MODEL_NAMES):
         return None
-    if set(results["model"]) != set(MODEL_NAMES):
-        return None
-    if set(results["imbalance_strategy"]) != set(STRATEGY_LABELS):
+    if not set(results["imbalance_strategy"]).issubset(STRATEGY_LABELS):
         return None
     if results.duplicated(["model", "imbalance_strategy"]).any():
         return None
@@ -199,6 +323,9 @@ def _current_model_available() -> bool:
         and status.get("status") == "complete"
         and metadata.get("run_id") == summary.get("run_id") == status.get("run_id")
         and metadata.get("split_strategy") == "chronological_by_step"
+        and metadata.get("workflow_version") == TRAINING_WORKFLOW_VERSION
+        and summary.get("workflow_version") == TRAINING_WORKFLOW_VERSION
+        and status.get("workflow_version") == TRAINING_WORKFLOW_VERSION
         and (MODEL_DIR / "best_model.joblib").is_file()
     )
 
@@ -337,16 +464,44 @@ def render_prediction() -> None:
 
 
 def render_model_results() -> None:
-    st.title("Compare treatments within each algorithm")
+    st.title("Model comparison: which setup works best?")
     current = _current_results()
     if current is None:
         _show_stale_run_notice()
         return
     results, summary = current
+    st.write(
+        "Each setup combines a prediction algorithm with a way to handle the "
+        "rarity of fraud. Use the chart to compare outcomes; the detailed table "
+        "is available below for technical review."
+    )
     st.caption(
-        f"{summary['sampled_rows']:,} rows evaluated. The final period contains "
-        f"{summary['fraud_test_rows']:,} fraud cases. Models are ranked by "
-        "validation cost, not by the final test results."
+        f"This run evaluated {summary['sampled_rows']:,} transactions. Its final "
+        f"time period contains {summary['fraud_test_rows']:,} fraud cases. The "
+        "test period measures performance only; it does not choose the winner."
+    )
+    recommended = results.sort_values(
+        ["validation_weighted_cost", "validation_precision_at_recall_target"],
+        ascending=[True, False],
+    ).iloc[0]
+    st.subheader("Recommended setup")
+    st.write(
+        f"**{recommended['model']} + "
+        f"{STRATEGY_LABELS[recommended['imbalance_strategy']]}** had the lowest "
+        "estimated review cost on the validation period. The figures below show "
+        "how that choice performed on the later, held-out period."
+    )
+    metric_a, metric_b, metric_c = st.columns(3)
+    metric_a.metric("Fraud ranking score (PR-AUC)", f"{recommended['pr_auc']:.3f}")
+    metric_b.metric("Fraud cases flagged (recall)", f"{recommended['recall']:.1%}")
+    metric_c.metric(
+        "Estimated cost per 1,000",
+        f"{recommended['cost_per_1000_transactions']:.2f}",
+    )
+    st.caption(
+        "Higher PR-AUC and recall generally mean stronger fraud detection. Cost "
+        "reflects the project’s chosen miss and review penalties. Results use "
+        "synthetic PaySim data and are not production estimates."
     )
     model_order = [model for model in MODEL_NAMES if model in results["model"].unique()]
     model_tabs = st.tabs(model_order)
@@ -356,6 +511,9 @@ def render_model_results() -> None:
         "validation_recall",
         "validation_weighted_cost",
         "threshold",
+        "tuning_pr_auc",
+        "tuning_seconds",
+        "hyperparameters",
         "precision",
         "recall",
         "pr_auc",
@@ -376,13 +534,13 @@ def render_model_results() -> None:
     }
     for tab, model in zip(model_tabs, model_order):
         with tab:
-            st.subheader(model)
+            st.subheader(model.replace("_", " ").title())
             model_results = results.loc[results["model"] == model].copy()
             model_results["treatment"] = model_results["imbalance_strategy"].map(
                 STRATEGY_LABELS
             )
             metric_label = st.selectbox(
-                "Compare treatments by",
+                "What should the chart compare?",
                 list(metric_choices),
                 key=f"metric_{model}",
             )
@@ -393,17 +551,18 @@ def render_model_results() -> None:
                 ["validation_weighted_cost", "validation_precision_at_recall_target"],
                 ascending=[True, False],
             )
-            st.dataframe(
-                strategy_results[[
-                    column for column in display_columns if column in strategy_results
-                ]].style.format(precision=3),
-                width="stretch",
-                hide_index=True,
-            )
-            st.caption(
-                "All three treatments share the same rows and time windows. "
-                "Lower cost is preferable; higher scores and throughput are preferable."
-            )
+            with st.expander("See detailed metrics and tuning information"):
+                st.dataframe(
+                    strategy_results[[
+                        column for column in display_columns if column in strategy_results
+                    ]].style.format(precision=3),
+                    width="stretch",
+                    hide_index=True,
+                )
+                st.caption(
+                    "All treatments share the same rows and time windows. Lower "
+                    "cost is preferable; higher scores and throughput are preferable."
+                )
 
 
 def render_visualizations() -> None:
@@ -412,12 +571,14 @@ def render_visualizations() -> None:
     if current is None:
         _show_stale_run_notice()
         return
-    _, summary = current
+    results, summary = current
     performance_path = FIGURE_DIR / "performance_dashboard.png"
     pareto_path = FIGURE_DIR / "pareto_dashboard.png"
     score_map_path = FIGURE_DIR / "model_strategy_pr_auc_heatmap.png"
     risk_map_path = FIGURE_DIR / "probability_band_risk_map.png"
-    visual_tabs = st.tabs(["Performance by algorithm", "Pareto frontiers", "High-score risk"])
+    visual_tabs = st.tabs(
+        ["Performance by algorithm", "Pareto frontiers", "High-score risk", "Probability calibration"]
+    )
     with visual_tabs[0]:
         if performance_path.is_file():
             st.image(str(performance_path), caption="Six holdout and operating metrics, grouped by algorithm")
@@ -425,7 +586,11 @@ def render_visualizations() -> None:
             st.warning("The performance dashboard is missing. Rerun the current training pipeline.")
     with visual_tabs[1]:
         if pareto_path.is_file():
-            st.image(str(pareto_path), caption="Final-period quality, speed, recall, and cost trade-offs")
+            st.image(
+                str(pareto_path),
+                caption="Final-period quality, speed, recall, and cost trade-offs",
+                width="stretch",
+            )
         else:
             st.warning("The Pareto dashboard is missing. Rerun the current training pipeline.")
     with visual_tabs[2]:
@@ -436,8 +601,33 @@ def render_visualizations() -> None:
             width="stretch",
             hide_index=True,
         )
+    with visual_tabs[3]:
+        available_strategies = [
+            strategy for strategy in STRATEGY_LABELS
+            if strategy in results["imbalance_strategy"].unique()
+        ]
+        strategy = st.selectbox(
+            "Imbalance treatment",
+            available_strategies,
+            format_func=lambda value: STRATEGY_LABELS[value],
+            key="calibration_strategy",
+        )
+        calibration_path = FIGURE_DIR / f"calibration_{strategy}.png"
+        if calibration_path.is_file():
+            st.image(
+                str(calibration_path),
+                caption=(
+                    "Final test period; descriptive only and not used to select "
+                    "models or thresholds."
+                ),
+            )
+        else:
+            st.info("Calibration figures are missing. Rerun the training workflow.")
     if score_map_path.is_file():
-        st.image(str(score_map_path), caption="PR-AUC matrix across all 15 pairings")
+        st.image(
+            str(score_map_path),
+            caption="PR-AUC matrix across the pairings in this run",
+        )
     st.caption(
         f"Run {summary['run_id']} completed {summary['completed_at']}. "
         "Pareto dominance is calculated on the final period for display, not model selection."
