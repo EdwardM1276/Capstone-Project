@@ -1,0 +1,46 @@
+model,imbalance_strategy,probability_band,lower_bound,upper_bound,transaction_count,observed_fraud_rate
+Logistic Regression,class_weight,Low,0.0,0.01,4194,0.0
+Logistic Regression,class_weight,Medium,0.01,0.05,77,0.0
+Logistic Regression,class_weight,High,0.05,1.0,1703,0.03523194362889019
+Random Forest,class_weight,Low,0.0,0.01,5900,0.0
+Random Forest,class_weight,Medium,0.01,0.05,13,0.0
+Random Forest,class_weight,High,0.05,1.0,61,0.9836065573770492
+XGBoost,class_weight,Low,0.0,0.01,5908,0.0
+XGBoost,class_weight,Medium,0.01,0.05,6,0.6666666666666666
+XGBoost,class_weight,High,0.05,1.0,60,0.9333333333333333
+Feedforward Neural Network,class_weight,Low,0.0,0.01,4875,0.00041025641025641023
+Feedforward Neural Network,class_weight,Medium,0.01,0.05,246,0.0
+Feedforward Neural Network,class_weight,High,0.05,1.0,853,0.06799531066822978
+LightGBM,class_weight,Low,0.0,0.01,5912,0.0006765899864682003
+LightGBM,class_weight,Medium,0.01,0.05,2,0.5
+LightGBM,class_weight,High,0.05,1.0,60,0.9166666666666666
+Logistic Regression,smote,Low,0.0,0.01,4239,0.0
+Logistic Regression,smote,Medium,0.01,0.05,72,0.0
+Logistic Regression,smote,High,0.05,1.0,1663,0.03607937462417318
+Random Forest,smote,Low,0.0,0.01,5882,0.0
+Random Forest,smote,Medium,0.01,0.05,28,0.0
+Random Forest,smote,High,0.05,1.0,64,0.9375
+XGBoost,smote,Low,0.0,0.01,5914,0.0
+XGBoost,smote,Medium,0.01,0.05,0,
+XGBoost,smote,High,0.05,1.0,60,1.0
+Feedforward Neural Network,smote,Low,0.0,0.01,5852,0.000683526999316473
+Feedforward Neural Network,smote,Medium,0.01,0.05,26,0.15384615384615385
+Feedforward Neural Network,smote,High,0.05,1.0,96,0.5416666666666666
+LightGBM,smote,Low,0.0,0.01,5914,0.0
+LightGBM,smote,Medium,0.01,0.05,0,
+LightGBM,smote,High,0.05,1.0,60,1.0
+Logistic Regression,smote_tomek,Low,0.0,0.01,4239,0.0
+Logistic Regression,smote_tomek,Medium,0.01,0.05,72,0.0
+Logistic Regression,smote_tomek,High,0.05,1.0,1663,0.03607937462417318
+Random Forest,smote_tomek,Low,0.0,0.01,5876,0.0
+Random Forest,smote_tomek,Medium,0.01,0.05,34,0.0
+Random Forest,smote_tomek,High,0.05,1.0,64,0.9375
+XGBoost,smote_tomek,Low,0.0,0.01,5914,0.0
+XGBoost,smote_tomek,Medium,0.01,0.05,0,
+XGBoost,smote_tomek,High,0.05,1.0,60,1.0
+Feedforward Neural Network,smote_tomek,Low,0.0,0.01,5852,0.000683526999316473
+Feedforward Neural Network,smote_tomek,Medium,0.01,0.05,26,0.15384615384615385
+Feedforward Neural Network,smote_tomek,High,0.05,1.0,96,0.5416666666666666
+LightGBM,smote_tomek,Low,0.0,0.01,5914,0.0
+LightGBM,smote_tomek,Medium,0.01,0.05,0,
+LightGBM,smote_tomek,High,0.05,1.0,60,1.0
