@@ -225,3 +225,33 @@ for operational review.
 ```powershell
 pytest
 ```
+## Leakage Audit
+
+A targeted leakage audit was completed to verify key safeguards in the current fraud-detection pipeline. The audit used four automated tests with artificial data and did not modify the project’s original source code, saved models, or existing evaluation reports.
+
+### Tests performed
+
+The following safeguards were tested:
+
+- **Forbidden predictor columns:** Confirmed that `isFraud`, `isFlaggedFraud`, `newbalanceOrig`, `newbalanceDest`, `nameOrig`, `nameDest`, and `step` are excluded from model predictors.
+- **Chronological partitioning:** Confirmed that training, validation, and test partitions are disjoint, complete, and correctly ordered by transaction `step`.
+- **Training-only preprocessing:** Confirmed that imputation medians, scaling means, and categorical categories are learned only from training data and remain unchanged during held-out prediction.
+- **Resampling scope:** Confirmed that SMOTE is applied only during model training and is not used during held-out prediction.
+
+### How to run the audit
+
+From the project root, run:
+
+```powershell
+python -m pytest .\tests\test_leakage_audit.py -v
+```
+
+Expected result:
+
+```text
+4 passed
+```
+
+### Scope and limitations
+
+These checks support the integrity of the current pipeline. They do not, by themselves, validate every historical artifact, saved model, or prior report. The audit should therefore be described as a targeted verification of current pipeline safeguards rather than proof that the entire project is leakage-free.
