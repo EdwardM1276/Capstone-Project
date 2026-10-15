@@ -8,6 +8,8 @@ from fraud_detection.config import DEFAULT_MAX_ROWS, FIGURE_DIR, MODEL_DIR, REPO
 from fraud_detection.models import MODEL_NAMES
 from fraud_detection.prediction import load_best_model, predict_transaction
 
+ROOT_DIR = Path(__file__).resolve().parents[1]
+
 STRATEGY_LABELS = {
     "class_weight": "Class weighting",
     "smote": "SMOTE",
@@ -443,10 +445,139 @@ def render_visualizations() -> None:
         "Pareto dominance is calculated on the final period for display, not model selection."
     )
 
+def render_explainability() -> None:
+    st.title("Explainability and XAI")
+    st.write(
+        "This page explains how the winning fraud-detection model makes "
+        "predictions. SHAP shows which features influence the model across "
+        "many transactions. LIME explains one individual transaction."
+    )
 
+    metadata = _read_json(MODEL_DIR / "best_model.json")
+    interpretability = _read_json(
+        ROOT_DIR / "evidence_deliverable_5" / "interpretability_summary.json"
+    )
+
+    if metadata is None:
+        st.info("No compatible saved model was found.")
+        st.code(_training_command(), language="powershell")
+        return
+
+    st.subheader("Winning model")
+    winning_model = pd.DataFrame(
+        [
+            ["Winning model", metadata.get("model", "Not available")],
+            [
+                "Imbalance strategy",
+                STRATEGY_LABELS.get(
+                    metadata.get("imbalance_strategy"),
+                    metadata.get("imbalance_strategy", "Not available"),
+                ),
+            ],
+            [
+                "Selection metric",
+                metadata.get(
+                    "selection_metric", "Not available"
+                ),
+            ],
+            ["Decision threshold", f"{metadata.get('threshold', 0):.4f}"],
+            [
+                "Validation precision",
+                f"{metadata.get('validation_metrics', {}).get('precision', 0):.4f}",
+            ],
+            [
+                "Validation recall",
+                f"{metadata.get('validation_metrics', {}).get('recall', 0):.4f}",
+            ],
+            ["Test precision", f"{metadata.get('metrics', {}).get('precision', 0):.4f}"],
+            ["Test recall", f"{metadata.get('metrics', {}).get('recall', 0):.4f}"],
+            ["Test F1-score", f"{metadata.get('metrics', {}).get('f1', 0):.4f}"],
+            ["Test ROC-AUC", f"{metadata.get('metrics', {}).get('roc_auc', 0):.4f}"],
+            ["Test PR-AUC", f"{metadata.get('metrics', {}).get('pr_auc', 0):.4f}"],
+            [
+                "Chronological split",
+                metadata.get("split_strategy", "Not available"),
+            ],
+        ],
+        columns=["Item", "Value"],
+    )
+    st.dataframe(winning_model, width="stretch", hide_index=True)
+
+    st.subheader("SHAP global explanation")
+    shap_path = ROOT_DIR / "evidence_deliverable_5" / "figures" / "shap_summary_plot.png"
+    if shap_path.is_file():
+        st.image(str(shap_path), caption="SHAP summary plot for the winning XGBoost model")
+    else:
+        st.warning(
+            "SHAP image not found. Run scripts/create_interpretability_evidence.py."
+        )
+
+    if interpretability:
+        top_features = interpretability.get("top_shap_features", [])
+        if top_features:
+            shap_table = pd.DataFrame(
+                [
+                    {
+                        "Feature": item["feature"],
+                        "Mean absolute SHAP value": round(
+                            item["mean_abs_shap"], 4
+                        ),
+                    }
+                    for item in top_features
+                ]
+            )
+            st.dataframe(shap_table, width="stretch", hide_index=True)
+
+    st.info(
+        "SHAP shows which features most often influence the model’s fraud "
+        "predictions. The strongest feature was transaction_to_origin_balance, "
+        "followed by amount, type_TRANSFER, hour, and oldbalanceDest. These "
+        "explanations describe model behaviour; they do not prove that a "
+        "feature causes fraud."
+    )
+
+    st.subheader("LIME local explanation")
+    lime_path = ROOT_DIR / "evidence_deliverable_5" / "figures" / "lime_local_explanation.png"
+    if lime_path.is_file():
+        st.image(
+            str(lime_path),
+            caption="LIME explanation for one transaction predicted as fraud",
+        )
+    else:
+        st.warning(
+            "LIME image not found. Run scripts/create_interpretability_evidence.py."
+        )
+
+    if interpretability:
+        probability = interpretability.get(
+            "explained_transaction_predicted_probability"
+        )
+        true_label = interpretability.get("explained_transaction_true_label")
+        if probability is not None:
+            st.metric(
+                "Explained transaction fraud score",
+                f"{float(probability):.1%}",
+            )
+        if true_label == 0:
+            st.warning(
+                "The explained transaction was actually legitimate. It is a "
+                "false positive, showing why human review is important before "
+                "blocking a transaction."
+            )
+
+    st.caption(
+        "LIME explains one individual prediction. It is a local approximation "
+        "of model behaviour, not proof that the transaction was fraudulent."
+    )
 page = st.sidebar.radio(
     "Project sections",
-    ["Overview", "Model comparison", "Visual analysis", "Transaction scoring"],
+    [
+        "Overview",
+        "Model comparison",
+        "Visual analysis",
+        "Explainability",
+        "Transaction scoring",
+    ],
 )
 if page == "Overview":
     render_overview()
@@ -454,5 +585,7 @@ elif page == "Model comparison":
     render_model_results()
 elif page == "Visual analysis":
     render_visualizations()
+elif page == "Explainability":
+    render_explainability()
 else:
     render_prediction()
