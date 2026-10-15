@@ -1,0 +1,51 @@
+{
+  "model": "XGBoost",
+  "imbalance_strategy": "class_weight",
+  "threshold": 0.06692970544099808,
+  "shap_sample_size": 60,
+  "explained_transaction_index": 375,
+  "explained_transaction_true_label": 0,
+  "explained_transaction_predicted_probability": 0.9277465343475342,
+  "top_shap_features": [
+    {
+      "feature": "transaction_to_origin_balance",
+      "mean_abs_shap": 6.1588969230651855
+    },
+    {
+      "feature": "amount",
+      "mean_abs_shap": 2.763854742050171
+    },
+    {
+      "feature": "type_TRANSFER",
+      "mean_abs_shap": 2.1376945972442627
+    },
+    {
+      "feature": "hour",
+      "mean_abs_shap": 1.7255066633224487
+    },
+    {
+      "feature": "oldbalanceDest",
+      "mean_abs_shap": 1.2175071239471436
+    },
+    {
+      "feature": "oldbalanceOrg",
+      "mean_abs_shap": 0.9084917902946472
+    },
+    {
+      "feature": "type_CASH_OUT",
+      "mean_abs_shap": 0.4888644814491272
+    },
+    {
+      "feature": "type_PAYMENT",
+      "mean_abs_shap": 0.00564661156386137
+    },
+    {
+      "feature": "type_CASH_IN",
+      "mean_abs_shap": 0.003171949414536357
+    },
+    {
+      "feature": "log_amount",
+      "mean_abs_shap": 0.0
+    }
+  ]
+}
