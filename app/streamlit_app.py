@@ -40,7 +40,7 @@ CURRENT_RESULT_COLUMNS = {
 
 st.set_page_config(
     page_title="PaySim | Fraud Review",
-    page_icon="🛡️",
+    page_icon="",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -653,9 +653,9 @@ def render_visualizations() -> None:
 
     visual_tabs = st.tabs(
         [
-            "📈 Performance by algorithm",
-            "⚖️ Pareto frontiers",
-            "⚠️ High-score risk",
+            " Performance by algorithm",
+            " Pareto frontiers",
+            " High-score risk",
         ]
     )
 
@@ -814,9 +814,9 @@ def render_explainability() -> None:
 
     shap_tab, lime_tab, insight_tab = st.tabs(
         [
-            "🌍 SHAP global explanation",
-            "🔎 LIME local explanation",
-            "📌 Business interpretation",
+            " SHAP global explanation",
+            " LIME local explanation",
+            " Business interpretation",
         ]
     )
 
@@ -1089,7 +1089,7 @@ def render_alert_triage() -> None:
 
 
 with st.sidebar:
-    st.markdown("## 🛡️ PaySim Fraud Review")
+    st.markdown("##  PaySim Fraud Review")
     st.caption("Fraud detection, model comparison, and explainable AI")
 
     st.divider()
@@ -1102,7 +1102,7 @@ with st.sidebar:
             "Visual analysis",
             "Explainability",
             "Transaction scoring",
-            "🚨 Alert triage & cost simulator",
+            " Alert triage & cost simulator",
         ],
         label_visibility="collapsed",
     )
@@ -1120,7 +1120,7 @@ elif page == "Visual analysis":
     render_visualizations()
 elif page == "Explainability":
     render_explainability()
-elif page == "🚨 Alert triage & cost simulator":
+elif page == "Alert triage & cost simulator":
     render_alert_triage()
 else:
     render_prediction()
