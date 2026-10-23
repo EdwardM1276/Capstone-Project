@@ -654,8 +654,8 @@ def render_visualizations() -> None:
     visual_tabs = st.tabs(
         [
             " Performance by algorithm",
-            " Pareto frontiers",
-            " High-score risk",
+            "Pareto frontiers",
+            "High-score risk",
         ]
     )
 
@@ -814,8 +814,8 @@ def render_explainability() -> None:
 
     shap_tab, lime_tab, insight_tab = st.tabs(
         [
-            " SHAP global explanation",
-            " LIME local explanation",
+            "SHAP global explanation",
+            "LIME local explanation",
             " Business interpretation",
         ]
     )
@@ -942,14 +942,9 @@ def render_explainability() -> None:
 
 def render_alert_triage() -> None:
     _page_header(
-        "Alert triage and cost simulator",
-        "Estimate review workload and the impact of false positives and missed fraud "
-        "using validation-period model metrics.",
-    )
-
-    st.info(
-        "This page estimates how many transactions may need review and compares the "
-        "cost of false alerts with the cost of missed fraud."
+        "Human-in-the-loop alert triage",
+        "Prioritise fraud alerts, understand why they were flagged, and record "
+        "analyst decisions for future model improvement.",
     )
 
     current = _current_results()
@@ -959,6 +954,10 @@ def render_alert_triage() -> None:
         return
 
     results, _ = current
+
+    # -------------------------
+    # Select model and strategy
+    # -------------------------
 
     st.markdown('<div class="panel">', unsafe_allow_html=True)
     st.markdown('<div class="panel-title">Select model and strategy</div>', unsafe_allow_html=True)
@@ -986,14 +985,345 @@ def render_alert_triage() -> None:
         model_results["imbalance_strategy"] == strategy
     ].iloc[0]
 
+    precision = float(selected["validation_precision_at_recall_target"])
+    recall = float(selected["validation_recall"])
+
+    st.caption(
+        f"Using validation precision of {precision:.1%} and recall of "
+        f"{recall:.1%} for {model} with {STRATEGY_LABELS[strategy]}."
+    )
+
     st.markdown('</div>', unsafe_allow_html=True)
 
+    # -------------------------
+    # Generate example alerts
+    # -------------------------
+
+    example_alerts = pd.DataFrame(
+        [
+            {
+                "alert_id": "ALERT-001",
+                "step": 412,
+                "type": "TRANSFER",
+                "amount": 185000.0,
+                "oldbalanceOrg": 190000.0,
+                "oldbalanceDest": 0.0,
+                "fraud_probability": 0.94,
+            },
+            {
+                "alert_id": "ALERT-002",
+                "step": 418,
+                "type": "CASH_OUT",
+                "amount": 96000.0,
+                "oldbalanceOrg": 100000.0,
+                "oldbalanceDest": 12000.0,
+                "fraud_probability": 0.78,
+            },
+            {
+                "alert_id": "ALERT-003",
+                "step": 431,
+                "type": "TRANSFER",
+                "amount": 420000.0,
+                "oldbalanceOrg": 450000.0,
+                "oldbalanceDest": 25000.0,
+                "fraud_probability": 0.71,
+            },
+            {
+                "alert_id": "ALERT-004",
+                "step": 452,
+                "type": "CASH_OUT",
+                "amount": 240000.0,
+                "oldbalanceOrg": 250000.0,
+                "oldbalanceDest": 0.0,
+                "fraud_probability": 0.58,
+            },
+            {
+                "alert_id": "ALERT-005",
+                "step": 470,
+                "type": "PAYMENT",
+                "amount": 850.0,
+                "oldbalanceOrg": 4500.0,
+                "oldbalanceDest": 300.0,
+                "fraud_probability": 0.22,
+            },
+            {
+                "alert_id": "ALERT-006",
+                "step": 505,
+                "type": "CASH_IN",
+                "amount": 15000.0,
+                "oldbalanceOrg": 80000.0,
+                "oldbalanceDest": 5000.0,
+                "fraud_probability": 0.08,
+            },
+        ]
+    )
+
+    def assign_risk_band(probability):
+        if probability >= 0.50:
+            return "High"
+        elif probability >= 0.10:
+            return "Medium"
+        return "Low"
+
+    example_alerts["risk_band"] = example_alerts["fraud_probability"].apply(
+        assign_risk_band
+    )
+
+    max_amount = example_alerts["amount"].max()
+
+    example_alerts["amount_risk"] = example_alerts["amount"] / max_amount
+
+    example_alerts["uncertainty"] = 1 - abs(
+        example_alerts["fraud_probability"] - 0.5
+    ) * 2
+
+    example_alerts["priority_score"] = (
+        0.60 * example_alerts["fraud_probability"]
+        + 0.25 * example_alerts["amount_risk"]
+        + 0.15 * example_alerts["uncertainty"]
+    )
+
+    example_alerts = example_alerts.sort_values(
+        "priority_score",
+        ascending=False,
+    ).reset_index(drop=True)
+
+    # -------------------------
+    # Priority alert queue
+    # -------------------------
+
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.markdown('<div class="panel-title">Simulation settings</div>', unsafe_allow_html=True)
+    st.markdown('<div class="panel-title">Priority alert queue</div>', unsafe_allow_html=True)
+    st.caption(
+        "Alerts are ranked using fraud probability, transaction-value risk, and "
+        "model uncertainty. Higher-priority alerts should be reviewed first."
+    )
 
-    inputs = st.columns(3)
+    risk_filter = st.selectbox(
+        "Filter by risk band",
+        ["All alerts", "High risk", "Medium risk", "Low risk"],
+    )
 
-    with inputs[0]:
+    if risk_filter == "High risk":
+        alert_queue = example_alerts[example_alerts["risk_band"] == "High"]
+    elif risk_filter == "Medium risk":
+        alert_queue = example_alerts[example_alerts["risk_band"] == "Medium"]
+    elif risk_filter == "Low risk":
+        alert_queue = example_alerts[example_alerts["risk_band"] == "Low"]
+    else:
+        alert_queue = example_alerts
+
+    st.dataframe(
+        alert_queue[
+            [
+                "alert_id",
+                "type",
+                "amount",
+                "fraud_probability",
+                "risk_band",
+                "priority_score",
+            ]
+        ],
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "amount": st.column_config.NumberColumn("Amount", format="R %.2f"),
+            "fraud_probability": st.column_config.ProgressColumn(
+                "Fraud probability",
+                min_value=0.0,
+                max_value=1.0,
+                format="%.2f",
+            ),
+            "priority_score": st.column_config.ProgressColumn(
+                "Review priority",
+                min_value=0.0,
+                max_value=1.0,
+                format="%.2f",
+            ),
+        },
+    )
+
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    # -------------------------
+    # Analyst review workspace
+    # -------------------------
+
+    st.markdown('<div class="panel">', unsafe_allow_html=True)
+    st.markdown('<div class="panel-title">Analyst review workspace</div>', unsafe_allow_html=True)
+    st.caption(
+        "Select an alert, read the explanation, and record a human decision."
+    )
+
+    selected_alert_id = st.selectbox(
+        "Select alert to review",
+        alert_queue["alert_id"].tolist(),
+    )
+
+    alert = example_alerts[
+        example_alerts["alert_id"] == selected_alert_id
+    ].iloc[0]
+
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
+        _metric_card(
+            "Fraud probability",
+            f"{alert['fraud_probability']:.1%}",
+            "Model-based fraud risk",
+            "#dc2626" if alert["fraud_probability"] >= 0.5 else "#155eef",
+        )
+
+    with col2:
+        _metric_card(
+            "Risk band",
+            alert["risk_band"],
+            "Model risk category",
+            "#dc2626" if alert["risk_band"] == "High" else "#155eef",
+        )
+
+    with col3:
+        _metric_card(
+            "Review priority",
+            f"{alert['priority_score']:.2f}",
+            "Higher means review sooner",
+            "#b54708",
+        )
+
+    with col4:
+        _metric_card(
+            "Transaction amount",
+            f"R {alert['amount']:,.0f}",
+            "Transaction value",
+        )
+
+    st.markdown('<div class="panel-title">Transaction details</div>', unsafe_allow_html=True)
+
+    detail_col1, detail_col2, detail_col3 = st.columns(3)
+
+    with detail_col1:
+        st.metric("Transaction type", alert["type"])
+
+    with detail_col2:
+        st.metric("Sender balance before", f"R {alert['oldbalanceOrg']:,.0f}")
+
+    with detail_col3:
+        st.metric("Recipient balance before", f"R {alert['oldbalanceDest']:,.0f}")
+
+    amount_ratio = (
+        alert["amount"] / alert["oldbalanceOrg"]
+        if alert["oldbalanceOrg"] > 0
+        else 0
+    )
+
+    explanation = (
+        f"This {alert['type']} transaction was assigned a fraud probability of "
+        f"{alert['fraud_probability']:.1%}. "
+    )
+
+    if alert["type"] in ["TRANSFER", "CASH_OUT"]:
+        explanation += (
+            "TRANSFER and CASH-OUT transactions are generally more relevant to "
+            "fraud risk than other transaction types. "
+        )
+
+    if amount_ratio >= 0.8:
+        explanation += (
+            "The transaction amount is very high compared with the sender’s "
+            "starting balance, which increases the model’s concern. "
+        )
+    elif amount_ratio >= 0.4:
+        explanation += (
+            "The transaction amount is moderately high compared with the sender’s "
+            "starting balance. "
+        )
+    else:
+        explanation += (
+            "The transaction amount is small compared with the sender’s starting "
+            "balance. "
+        )
+
+    if alert["fraud_probability"] >= 0.5:
+        explanation += (
+            "Because the fraud probability is above 50%, this alert is classified "
+            "as high risk and should be reviewed urgently."
+        )
+    elif alert["fraud_probability"] >= 0.10:
+        explanation += (
+            "Because the fraud probability is between 10% and 50%, this alert is "
+            "classified as medium risk and should be monitored or reviewed."
+        )
+    else:
+        explanation += (
+            "Because the fraud probability is below 10%, this alert is classified "
+            "as low risk."
+        )
+
+    st.info(explanation)
+
+    st.caption(
+        "This explanation describes patterns learned by the model. It does not prove "
+        "that the transaction is fraudulent."
+    )
+
+    st.markdown('<div class="panel-title">Record analyst decision</div>', unsafe_allow_html=True)
+
+    decision = st.radio(
+        "What should happen to this alert?",
+        [
+            "Confirm fraud",
+            "False positive",
+            "Needs further investigation",
+        ],
+        horizontal=True,
+        key=f"decision_{selected_alert_id}",
+    )
+
+    analyst_notes = st.text_area(
+        "Analyst notes",
+        placeholder="Write a short note explaining the decision.",
+        key=f"notes_{selected_alert_id}",
+    )
+
+    if st.button(
+        "Save decision",
+        type="primary",
+        key=f"save_{selected_alert_id}",
+    ):
+        if "analyst_feedback" not in st.session_state:
+            st.session_state["analyst_feedback"] = []
+
+        st.session_state["analyst_feedback"].append(
+            {
+                "alert_id": selected_alert_id,
+                "decision": decision,
+                "fraud_probability": alert["fraud_probability"],
+                "risk_band": alert["risk_band"],
+                "priority_score": alert["priority_score"],
+                "analyst_notes": analyst_notes,
+            }
+        )
+
+        st.success(
+            f"Decision saved for {selected_alert_id}: {decision}."
+        )
+
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    # -------------------------
+    # Cost simulator
+    # -------------------------
+
+    st.markdown('<div class="panel">', unsafe_allow_html=True)
+    st.markdown('<div class="panel-title">Cost-impact simulator</div>', unsafe_allow_html=True)
+    st.caption(
+        "Estimate the operational effect of reviewing alerts using model precision "
+        "and recall."
+    )
+
+    simulation_inputs = st.columns(3)
+
+    with simulation_inputs[0]:
         transaction_volume = st.number_input(
             "Transactions to simulate",
             min_value=1,
@@ -1001,7 +1331,7 @@ def render_alert_triage() -> None:
             step=1_000,
         )
 
-    with inputs[1]:
+    with simulation_inputs[1]:
         fraud_prevalence = st.slider(
             "Expected fraud prevalence (%)",
             min_value=0.01,
@@ -1010,7 +1340,7 @@ def render_alert_triage() -> None:
             step=0.01,
         ) / 100
 
-    with inputs[2]:
+    with simulation_inputs[2]:
         review_capacity = st.number_input(
             "Analyst review capacity",
             min_value=1,
@@ -1036,9 +1366,6 @@ def render_alert_triage() -> None:
             step=10.0,
         )
 
-    precision = float(selected["validation_precision_at_recall_target"])
-    recall = float(selected["validation_recall"])
-
     expected_fraud = transaction_volume * fraud_prevalence
     true_positives = expected_fraud * recall
     false_negatives = expected_fraud - true_positives
@@ -1055,20 +1382,18 @@ def render_alert_triage() -> None:
         + false_negatives * missed_fraud_cost
     )
 
-    st.markdown('<div class="panel-title">Estimated triage workload</div>', unsafe_allow_html=True)
+    metric_columns = st.columns(4)
 
-    metrics = st.columns(4)
-
-    with metrics[0]:
+    with metric_columns[0]:
         st.metric("Alerts for review", f"{estimated_alerts:,.0f}")
 
-    with metrics[1]:
+    with metric_columns[1]:
         st.metric("False alerts", f"{false_positives:,.0f}")
 
-    with metrics[2]:
+    with metric_columns[2]:
         st.metric("Missed fraud", f"{false_negatives:,.0f}")
 
-    with metrics[3]:
+    with metric_columns[3]:
         st.metric("Estimated total cost", f"R {estimated_cost:,.2f}")
 
     if estimated_alerts > review_capacity:
@@ -1082,14 +1407,77 @@ def render_alert_triage() -> None:
     st.caption(
         f"Estimates use validation precision ({precision:.1%}) and recall "
         f"({recall:.1%}) for {model} with {STRATEGY_LABELS[strategy]}. "
-        "These are scenario estimates, not a scored transaction queue or production forecast."
+        "These are scenario estimates, not a production forecast."
     )
 
     st.markdown('</div>', unsafe_allow_html=True)
 
+    # -------------------------
+    # Analyst feedback summary
+    # -------------------------
+
+    st.markdown('<div class="panel">', unsafe_allow_html=True)
+    st.markdown('<div class="panel-title">Analyst feedback summary</div>', unsafe_allow_html=True)
+
+    feedback = st.session_state.get("analyst_feedback", [])
+
+    if not feedback:
+        st.info(
+            "No analyst decisions have been saved yet. Select an alert and save a "
+            "decision to create feedback."
+        )
+    else:
+        feedback_df = pd.DataFrame(feedback)
+
+        confirmed = (feedback_df["decision"] == "Confirm fraud").sum()
+        false_positives = (feedback_df["decision"] == "False positive").sum()
+        investigate = (
+            feedback_df["decision"] == "Needs further investigation"
+        ).sum()
+
+        summary_columns = st.columns(3)
+
+        with summary_columns[0]:
+            st.metric("Confirmed fraud", confirmed)
+
+        with summary_columns[1]:
+            st.metric("False positives", false_positives)
+
+        with summary_columns[2]:
+            st.metric("Needs investigation", investigate)
+
+        st.dataframe(
+            feedback_df,
+            use_container_width=True,
+            hide_index=True,
+        )
+
+        csv_data = feedback_df.to_csv(index=False).encode("utf-8")
+
+        st.download_button(
+            label="Download analyst feedback as CSV",
+            data=csv_data,
+            file_name="analyst_feedback.csv",
+            mime="text/csv",
+            use_container_width=True,
+        )
+
+        st.info(
+            "In a production system, analyst feedback could be used as new labelled "
+            "data for future model retraining. This helps the model learn from "
+            "confirmed fraud cases and reduce false positives."
+        )
+
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    st.caption(
+        "This workspace supports human decision-making. It does not automatically "
+        "block transactions or replace fraud analysts."
+    )
+
 
 with st.sidebar:
-    st.markdown("##  PaySim Fraud Review")
+    st.markdown("## PaySim Fraud Review")
     st.caption("Fraud detection, model comparison, and explainable AI")
 
     st.divider()
@@ -1102,7 +1490,7 @@ with st.sidebar:
             "Visual analysis",
             "Explainability",
             "Transaction scoring",
-            " Alert triage & cost simulator",
+            "Alert triage & cost simulator",
         ],
         label_visibility="collapsed",
     )
