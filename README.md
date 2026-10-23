@@ -155,9 +155,10 @@ run `a0c5812936ac`, completed on 9 October 2026. They predate the current
 training methodology and must be described as that recorded run, rather than as
 results produced by the current training code. They can be carried forward as
 the Deliverable 5 baseline without retraining. Run training again only if the
-project needs results for the current methodology. See
-`reports/DELIVERABLE_6_HANDOFF.md` for the baseline metrics, visuals, tests, and
-items to carry into Deliverable 6.
+project needs results for a changed methodology. See
+`reports/DELIVERABLE_6.md` for the project conclusion and recommendations, and
+`reports/DELIVERABLE_6_WORKING_TEMPLATE.md` for the rubric map and evidence
+locator.
 
 ### 4. Run the application
 
