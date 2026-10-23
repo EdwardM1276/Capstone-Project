@@ -1,4 +1,5 @@
 import json
+import html
 from pathlib import Path
 
 import pandas as pd
@@ -6,6 +7,7 @@ import streamlit as st
 
 from fraud_detection.config import DEFAULT_MAX_ROWS, FIGURE_DIR, MODEL_DIR, REPORT_DIR
 from fraud_detection.models import MODEL_NAMES
+from fraud_detection.features import engineer_features
 from fraud_detection.prediction import load_best_model, predict_transaction
 
 
@@ -49,137 +51,49 @@ st.set_page_config(
 st.markdown(
     """
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-
-        html, body, [class*="css"] {
-            font-family: 'Inter', sans-serif;
-            color: #0f172a;
-        }
-
-        .stApp {
-            background:
-                radial-gradient(circle at top left, rgba(21,94,239,0.08), transparent 45%),
-                radial-gradient(circle at top right, rgba(16,185,129,0.08), transparent 45%),
-                #f5f7fb;
-        }
-
-        [data-testid="stHeader"] {
-            background: transparent;
-        }
-
-        section[data-testid="stSidebar"] {
-            background: linear-gradient(180deg, #0f172a 0%, #111827 100%);
-        }
-
-        section[data-testid="stSidebar"] * {
-            color: #e5e7eb !important;
-        }
-
-        .app-title {
-            font-size: 2.35rem;
-            font-weight: 800;
-            color: #0f172a;
-            margin-bottom: 0.15rem;
-        }
-
-        .app-subtitle {
-            font-size: 1.02rem;
-            color: #475569;
-            margin-bottom: 1.4rem;
-        }
-
-        .metric-card {
-            background: white;
-            border-radius: 18px;
-            padding: 1.2rem 1.3rem;
-            border: 1px solid rgba(148,163,184,0.18);
-            box-shadow: 0 10px 28px rgba(15,23,42,0.07);
-            height: 100%;
-        }
-
-        .metric-label {
-            font-size: 0.78rem;
-            font-weight: 700;
-            letter-spacing: 0.08em;
-            text-transform: uppercase;
-            color: #64748b;
-        }
-
-        .metric-value {
-            font-size: 1.9rem;
-            font-weight: 800;
-            color: #155eef;
-            margin-top: 0.25rem;
-        }
-
-        .metric-note {
-            font-size: 0.82rem;
-            color: #64748b;
-            margin-top: 0.25rem;
-        }
-
-        .panel {
-            background: white;
-            border-radius: 20px;
-            padding: 1.5rem;
-            border: 1px solid rgba(148,163,184,0.16);
-            box-shadow: 0 10px 28px rgba(15,23,42,0.06);
-            margin-bottom: 1.2rem;
-        }
-
-        .panel-title {
-            font-size: 1.12rem;
-            font-weight: 700;
-            color: #0f172a;
-            margin-bottom: 0.8rem;
-        }
-
-        .risk-high {
-            background: linear-gradient(135deg, #dc2626, #b91c1c);
-            color: white;
-            border-radius: 18px;
-            padding: 1.4rem;
-        }
-
-        .risk-low {
-            background: linear-gradient(135deg, #16a34a, #15803d);
-            color: white;
-            border-radius: 18px;
-            padding: 1.4rem;
-        }
-
-        .footer-note {
-            text-align: center;
-            color: #64748b;
-            font-size: 0.84rem;
-            margin-top: 2rem;
-        }
-
-        div[data-testid="stMetric"] {
-            background: white;
-            border: 1px solid rgba(148,163,184,0.16);
-            border-radius: 16px;
-            padding: 1rem;
-            box-shadow: 0 8px 22px rgba(15,23,42,0.05);
-        }
-
-        .stTabs [data-baseweb="tab-list"] {
-            gap: 8px;
-        }
-
-        .stTabs [data-baseweb="tab"] {
-            background: #e2e8f0;
-            border-radius: 999px;
-            padding: 0.45rem 1rem;
-        }
-
-        .stTabs [aria-selected="true"] {
-            background: #155eef !important;
-        }
-
-        .stTabs [aria-selected="true"] p {
-            color: white !important;
-        }
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+        :root { color-scheme: dark; }
+        html, body, [class*="css"], [data-testid="stAppViewContainer"] { font-family: 'Plus Jakarta Sans', sans-serif; color: #F8FAFC; }
+        .stApp { background: radial-gradient(ellipse at 12% 0%, rgba(56,189,248,.10), transparent 34%), radial-gradient(ellipse at 94% 10%, rgba(16,185,129,.055), transparent 28%), #0B0F19; }
+        [data-testid="stHeader"] { background: rgba(11,15,25,.82); }
+        [data-testid="stToolbar"] { right: 1rem; }
+        section[data-testid="stSidebar"] { background: linear-gradient(180deg,#080C15,#0D1422); border-right: 1px solid #1E293B; }
+        section[data-testid="stSidebar"] > div { padding: 1.3rem .9rem; }
+        section[data-testid="stSidebar"] * { color: #CBD5E1; }
+        .app-title { font-size: clamp(1.8rem,3vw,2.65rem); line-height: 1.12; letter-spacing: -.045em; font-weight: 800; color: #F8FAFC; margin: .35rem 0 .5rem; }
+        .app-subtitle { font-size: .98rem; color: #94A3B8; margin-bottom: 1.5rem; max-width: 900px; }
+        .panel, .metric-card { background: linear-gradient(145deg,rgba(19,28,46,.96),rgba(15,23,38,.98)); border: 1px solid #1E293B; border-radius: 16px; padding: 1.2rem 1.35rem; box-shadow: 0 14px 36px rgba(0,0,0,.22); margin-bottom: 1rem; }
+        .metric-card { height: 100%; border-radius: 12px; }
+        .metric-label { font-size: .72rem; font-weight: 700; letter-spacing: .11em; text-transform: uppercase; color: #94A3B8; }
+        .metric-value { font-family: 'JetBrains Mono',monospace; font-size: 1.7rem; font-weight: 700; color: #38BDF8; margin-top: .4rem; }
+        .metric-note { font-size: .78rem; color: #94A3B8; margin-top: .4rem; }
+        .panel-title { font-size: 1.05rem; font-weight: 700; letter-spacing: -.015em; color: #F8FAFC; margin: 0 0 .8rem; }
+        .section-kicker { color:#38BDF8; font-size:.72rem; font-weight:800; letter-spacing:.13em; text-transform:uppercase; margin-bottom:.25rem; }
+        .risk-high, .risk-low { border-radius: 12px; padding: 1rem 1.15rem; font-weight: 700; }
+        .risk-high { color:#FCA5A5; background:rgba(239,68,68,.11); border:1px solid rgba(239,68,68,.35); }
+        .risk-low { color:#6EE7B7; background:rgba(16,185,129,.10); border:1px solid rgba(16,185,129,.32); }
+        .risk-badge { display:inline-flex; align-items:center; border-radius:999px; padding:.22rem .62rem; font-size:.72rem; font-weight:800; letter-spacing:.04em; }
+        .risk-badge.high { color:#FCA5A5; background:rgba(239,68,68,.13); border:1px solid rgba(239,68,68,.35); }
+        .risk-badge.low { color:#6EE7B7; background:rgba(16,185,129,.12); border:1px solid rgba(16,185,129,.32); }
+        .mono { font-family:'JetBrains Mono',monospace !important; }
+        .footer-note { text-align:center; color:#64748B; font-size:.78rem; margin:2rem 0 1rem; }
+        div[data-testid="stMetric"] { background:#131C2E; border:1px solid #1E293B; border-radius:12px; padding:.9rem 1rem; box-shadow:0 8px 24px rgba(0,0,0,.18); }
+        [data-testid="stMetricLabel"] p { color:#94A3B8 !important; font-weight:600; }
+        [data-testid="stMetricValue"] { color:#F8FAFC; font-family:'JetBrains Mono',monospace; }
+        .stTabs [data-baseweb="tab-list"] { gap:.35rem; border-bottom:1px solid #1E293B; }
+        .stTabs [data-baseweb="tab"] { background:transparent; border-radius:9px 9px 0 0; padding:.55rem .9rem; color:#94A3B8; }
+        .stTabs [aria-selected="true"] { background:rgba(56,189,248,.1) !important; border-bottom:2px solid #38BDF8; }
+        .stTabs [aria-selected="true"] p { color:#7DD3FC !important; }
+        [data-testid="stDataFrame"], [data-testid="stTable"] { border:1px solid #1E293B; border-radius:12px; overflow:hidden; }
+        [data-testid="stDataFrame"] * { font-family:'Plus Jakarta Sans',sans-serif; }
+        div[data-baseweb="select"] > div, div[data-baseweb="input"] > div, textarea { background:#0F1726 !important; border-color:#334155 !important; border-radius:10px !important; }
+        div[data-baseweb="select"] *, input, textarea { color:#F8FAFC !important; }
+        .stButton button, [data-testid="stFormSubmitButton"] button { border-radius:10px; border:1px solid #334155; transition:all .18s ease; }
+        .stButton button:hover, [data-testid="stFormSubmitButton"] button:hover { border-color:#38BDF8; box-shadow:0 0 18px rgba(56,189,248,.18); transform:translateY(-1px); }
+        button[kind="primary"] { background:linear-gradient(135deg,#0EA5E9,#0284C7); color:#F8FAFC; border:0; }
+        hr { border-color:#1E293B !important; }
+        [data-testid="stCaptionContainer"] { color:#94A3B8; }
+        #MainMenu, footer { visibility:hidden; }
     </style>
     """,
     unsafe_allow_html=True,
@@ -294,6 +208,27 @@ def _metric_card(label: str, value: str, note: str = "", colour: str = "#155eef"
             <div class="metric-note">{note}</div>
         </div>
         """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_card(title: str, body: str = "", *, kicker: str = "") -> None:
+    """Render a reusable dark dashboard card. Body accepts trusted app HTML."""
+    kicker_html = (
+        f'<div class="section-kicker">{html.escape(kicker)}</div>' if kicker else ""
+    )
+    st.markdown(
+        f'<div class="panel">{kicker_html}'
+        f'<div class="panel-title">{html.escape(title)}</div>{body}</div>',
+        unsafe_allow_html=True,
+    )
+
+
+def render_risk_badge(flagged: bool, label: str | None = None) -> None:
+    text = label or ("FLAGGED" if flagged else "LOW RISK")
+    style = "high" if flagged else "low"
+    st.markdown(
+        f'<span class="risk-badge {style}">{html.escape(text)}</span>',
         unsafe_allow_html=True,
     )
 
@@ -654,8 +589,8 @@ def render_visualizations() -> None:
     visual_tabs = st.tabs(
         [
             " Performance by algorithm",
-            "Pareto frontiers",
-            "High-score risk",
+            " Pareto frontiers",
+            " High-score risk",
         ]
     )
 
@@ -814,8 +749,8 @@ def render_explainability() -> None:
 
     shap_tab, lime_tab, insight_tab = st.tabs(
         [
-            "SHAP global explanation",
-            "LIME local explanation",
+            " SHAP global explanation",
+            " LIME local explanation",
             " Business interpretation",
         ]
     )
@@ -942,37 +877,23 @@ def render_explainability() -> None:
 
 def render_alert_triage() -> None:
     _page_header(
-        "Human-in-the-loop alert triage",
-        "Prioritise fraud alerts, understand why they were flagged, and record "
-        "analyst decisions for future model improvement.",
+        "Alert triage & cost simulator",
+        "Score a transaction batch, work the highest-risk cases, and estimate the "
+        "operational effect using the selected model’s validation precision and recall.",
     )
 
     current = _current_results()
-
     if current is None:
         _show_stale_run_notice()
         return
-
     results, _ = current
 
-    # -------------------------
-    # Select model and strategy
-    # -------------------------
-
-    st.markdown('<div class="panel">', unsafe_allow_html=True)
+    st.markdown('<div class="section-kicker">01 / CONFIGURE</div>', unsafe_allow_html=True)
     st.markdown('<div class="panel-title">Select model and strategy</div>', unsafe_allow_html=True)
-
     model_columns = st.columns(2)
-
     with model_columns[0]:
-        model = st.selectbox(
-            "Model",
-            MODEL_NAMES,
-            key="triage_model",
-        )
-
+        model = st.selectbox("Model", MODEL_NAMES, key="triage_model")
     model_results = results.loc[results["model"] == model]
-
     with model_columns[1]:
         strategy = st.selectbox(
             "Imbalance strategy",
@@ -980,504 +901,175 @@ def render_alert_triage() -> None:
             format_func=lambda value: STRATEGY_LABELS[value],
             key="triage_strategy",
         )
-
     selected = model_results.loc[
         model_results["imbalance_strategy"] == strategy
     ].iloc[0]
-
     precision = float(selected["validation_precision_at_recall_target"])
     recall = float(selected["validation_recall"])
+    threshold = float(selected["threshold"])
+    st.caption(f"Validation operating point · precision {precision:.1%} · recall {recall:.1%} · threshold {threshold:.1%}")
 
-    st.caption(
-        f"Using validation precision of {precision:.1%} and recall of "
-        f"{recall:.1%} for {model} with {STRATEGY_LABELS[strategy]}."
+    st.markdown('<div class="section-kicker">02 / INGEST</div>', unsafe_allow_html=True)
+    render_card(
+        "Upload bulk transactions",
+        "<p style='color:#94A3B8;margin:0 0 .8rem'>CSV columns required: <span class='mono'>step, type, amount, oldbalanceOrg, oldbalanceDest</span>. Extra columns are retained for the review table; the model only uses pre-transaction features.</p>",
     )
+    uploaded = st.file_uploader("Choose transaction CSV", type=["csv"], key="bulk_transaction_file")
+    st.caption("Optional case ID column: transaction_id. If absent, nameOrig or the row number is used. Keep sensitive data out of uploaded files.")
 
-    st.markdown('</div>', unsafe_allow_html=True)
+    config = (model, strategy)
+    old_config = st.session_state.get("scored_config")
+    if old_config and old_config != config:
+        st.info("Model or strategy changed. Upload and score the batch again to refresh the queue.")
+    if uploaded is not None and st.button("Score batch and build alert queue", type="primary", key="score_bulk_batch"):
+        required = {"step", "type", "amount", "oldbalanceOrg", "oldbalanceDest"}
+        try:
+            batch = pd.read_csv(uploaded)
+            missing = sorted(required - set(batch.columns))
+            if missing:
+                raise ValueError(f"Missing required columns: {', '.join(missing)}")
+            if batch.empty:
+                raise ValueError("The uploaded CSV has no transaction rows.")
+            if len(batch) > 250_000:
+                raise ValueError("Batch is limited to 250,000 transactions per upload.")
+            # Keep simulator ground-truth and post-event values out of the analyst view.
+            batch = batch.drop(
+                columns=["isFraud", "isFlaggedFraud", "newbalanceOrig", "newbalanceDest"],
+                errors="ignore",
+            )
+            features = engineer_features(batch)
+            model_slug = {
+                "Logistic Regression": "logistic_regression",
+                "Random Forest": "random_forest",
+                "XGBoost": "xgboost",
+                "Feedforward Neural Network": "feedforward_neural_network",
+                "LightGBM": "lightgbm",
+            }[model]
+            model_path = MODEL_DIR / f"{model_slug}_{strategy}.joblib"
+            if not model_path.is_file():
+                raise FileNotFoundError(f"Selected model artifact is missing: {model_path.name}")
+            fitted_model = get_model(str(model_path), model_path.stat().st_mtime_ns)
+            probabilities = fitted_model.predict_proba(features)[:, 1]
+            model_threshold = float(getattr(fitted_model, "fraud_decision_threshold_", threshold))
+            scored = batch.copy()
+            if "transaction_id" not in scored:
+                if "nameOrig" in scored:
+                    scored["transaction_id"] = scored["nameOrig"].astype(str)
+                else:
+                    scored["transaction_id"] = [f"TXN-{i + 1:06d}" for i in range(len(scored))]
+            ids = scored["transaction_id"].astype(str)
+            duplicate_ids = ids.duplicated(keep=False)
+            if duplicate_ids.any():
+                occurrence = ids.groupby(ids).cumcount().add(1).astype(str)
+                ids = ids.where(~duplicate_ids, ids + " · " + occurrence)
+            scored["transaction_id"] = ids
+            scored["fraud_probability"] = probabilities
+            scored["decision_threshold"] = model_threshold
+            scored["flagged"] = probabilities >= model_threshold
+            scored["risk_band"] = pd.cut(
+                probabilities, bins=[-float("inf"), .01, .05, float("inf")],
+                labels=["Low", "Medium", "High"], right=False,
+            ).astype(str)
+            scored["analyst_decision"] = "Pending"
+            st.session_state["scored_batch"] = scored
+            st.session_state["scored_config"] = config
+            st.session_state["analyst_decisions"] = {}
+            st.success(f"Scored {len(scored):,} transactions. {int(scored['flagged'].sum()):,} were flagged for review.")
+        except (OSError, ValueError, RuntimeError, KeyError, pd.errors.ParserError) as error:
+            st.error(f"Unable to score this batch: {error}")
 
-    # -------------------------
-    # Generate example alerts
-    # -------------------------
+    batch = st.session_state.get("scored_batch") if st.session_state.get("scored_config") == config else None
+    if batch is None:
+        return
 
-    example_alerts = pd.DataFrame(
-        [
-            {
-                "alert_id": "ALERT-001",
-                "step": 412,
-                "type": "TRANSFER",
-                "amount": 185000.0,
-                "oldbalanceOrg": 190000.0,
-                "oldbalanceDest": 0.0,
-                "fraud_probability": 0.94,
-            },
-            {
-                "alert_id": "ALERT-002",
-                "step": 418,
-                "type": "CASH_OUT",
-                "amount": 96000.0,
-                "oldbalanceOrg": 100000.0,
-                "oldbalanceDest": 12000.0,
-                "fraud_probability": 0.78,
-            },
-            {
-                "alert_id": "ALERT-003",
-                "step": 431,
-                "type": "TRANSFER",
-                "amount": 420000.0,
-                "oldbalanceOrg": 450000.0,
-                "oldbalanceDest": 25000.0,
-                "fraud_probability": 0.71,
-            },
-            {
-                "alert_id": "ALERT-004",
-                "step": 452,
-                "type": "CASH_OUT",
-                "amount": 240000.0,
-                "oldbalanceOrg": 250000.0,
-                "oldbalanceDest": 0.0,
-                "fraud_probability": 0.58,
-            },
-            {
-                "alert_id": "ALERT-005",
-                "step": 470,
-                "type": "PAYMENT",
-                "amount": 850.0,
-                "oldbalanceOrg": 4500.0,
-                "oldbalanceDest": 300.0,
-                "fraud_probability": 0.22,
-            },
-            {
-                "alert_id": "ALERT-006",
-                "step": 505,
-                "type": "CASH_IN",
-                "amount": 15000.0,
-                "oldbalanceOrg": 80000.0,
-                "oldbalanceDest": 5000.0,
-                "fraud_probability": 0.08,
-            },
-        ]
-    )
+    decisions = st.session_state.setdefault("analyst_decisions", {})
+    flagged = batch.loc[batch["flagged"]].copy()
+    if decisions:
+        batch["analyst_decision"] = batch["transaction_id"].astype(str).map(decisions).fillna("Pending")
+        flagged["analyst_decision"] = flagged["transaction_id"].astype(str).map(decisions).fillna("Pending")
+        st.session_state["scored_batch"] = batch
 
-    def assign_risk_band(probability):
-        if probability >= 0.50:
-            return "High"
-        elif probability >= 0.10:
-            return "Medium"
-        return "Low"
-
-    example_alerts["risk_band"] = example_alerts["fraud_probability"].apply(
-        assign_risk_band
-    )
-
-    max_amount = example_alerts["amount"].max()
-
-    example_alerts["amount_risk"] = example_alerts["amount"] / max_amount
-
-    example_alerts["uncertainty"] = 1 - abs(
-        example_alerts["fraud_probability"] - 0.5
-    ) * 2
-
-    example_alerts["priority_score"] = (
-        0.60 * example_alerts["fraud_probability"]
-        + 0.25 * example_alerts["amount_risk"]
-        + 0.15 * example_alerts["uncertainty"]
-    )
-
-    example_alerts = example_alerts.sort_values(
-        "priority_score",
-        ascending=False,
-    ).reset_index(drop=True)
-
-    # -------------------------
-    # Priority alert queue
-    # -------------------------
-
-    st.markdown('<div class="panel">', unsafe_allow_html=True)
+    st.markdown('<div class="section-kicker">03 / PRIORITIZE</div>', unsafe_allow_html=True)
     st.markdown('<div class="panel-title">Priority alert queue</div>', unsafe_allow_html=True)
-    st.caption(
-        "Alerts are ranked using fraud probability, transaction-value risk, and "
-        "model uncertainty. Higher-priority alerts should be reviewed first."
-    )
-
-    risk_filter = st.selectbox(
-        "Filter by risk band",
-        ["All alerts", "High risk", "Medium risk", "Low risk"],
-    )
-
-    if risk_filter == "High risk":
-        alert_queue = example_alerts[example_alerts["risk_band"] == "High"]
-    elif risk_filter == "Medium risk":
-        alert_queue = example_alerts[example_alerts["risk_band"] == "Medium"]
-    elif risk_filter == "Low risk":
-        alert_queue = example_alerts[example_alerts["risk_band"] == "Low"]
+    st.caption("Flagged cases ordered by model score. The queue prioritizes review; it does not determine fraud outcomes.")
+    queue_columns = [c for c in ["transaction_id", "type", "amount", "fraud_probability", "risk_band", "analyst_decision"] if c in flagged]
+    if flagged.empty:
+        st.success("No transactions crossed the selected model threshold in this batch.")
     else:
-        alert_queue = example_alerts
+        queue = flagged.sort_values("fraud_probability", ascending=False)
+        st.dataframe(queue[queue_columns].style.format({"amount": "R {:,.2f}", "fraud_probability": "{:.2%}"}), use_container_width=True, hide_index=True)
 
-    st.dataframe(
-        alert_queue[
-            [
-                "alert_id",
-                "type",
-                "amount",
-                "fraud_probability",
-                "risk_band",
-                "priority_score",
-            ]
-        ],
-        use_container_width=True,
-        hide_index=True,
-        column_config={
-            "amount": st.column_config.NumberColumn("Amount", format="R %.2f"),
-            "fraud_probability": st.column_config.ProgressColumn(
-                "Fraud probability",
-                min_value=0.0,
-                max_value=1.0,
-                format="%.2f",
-            ),
-            "priority_score": st.column_config.ProgressColumn(
-                "Review priority",
-                min_value=0.0,
-                max_value=1.0,
-                format="%.2f",
-            ),
-        },
-    )
+        st.markdown('<div class="section-kicker">04 / INVESTIGATE</div>', unsafe_allow_html=True)
+        st.markdown('<div class="panel-title">Analyst review workspace</div>', unsafe_allow_html=True)
+        case_ids = queue["transaction_id"].astype(str).tolist()
+        case_id = st.selectbox("Select a flagged case", case_ids, key="review_case")
+        case = queue.loc[queue["transaction_id"].astype(str) == case_id].iloc[0]
+        detail_left, detail_right = st.columns([1, 2])
+        with detail_left:
+            render_risk_badge(True, f"{case['risk_band']} RISK · {case['fraud_probability']:.1%}")
+            st.metric("Model threshold", f"{case['decision_threshold']:.1%}")
+        with detail_right:
+            st.dataframe(pd.DataFrame({"Field": case.index, "Value": case.values}), use_container_width=True, hide_index=True)
+        with st.form(f"decision_form_{html.escape(case_id)}"):
+            decision = st.selectbox("Analyst decision", ["Confirmed fraud", "Legitimate activity", "Escalate for further review"], key=f"decision_{case_id}")
+            rationale = st.text_area("Review notes", key=f"notes_{case_id}", placeholder="Summarize the evidence considered")
+            record = st.form_submit_button("Record analyst decision", type="primary")
+        if record:
+            decisions[case_id] = decision
+            st.session_state["analyst_decisions"] = decisions
+            st.session_state.setdefault("analyst_notes", {})[case_id] = rationale
+            st.session_state["scored_batch"] = batch
+            st.success(f"Decision recorded for {case_id}: {decision}.")
+        recorded = st.session_state.get("analyst_decisions", {})
+        if recorded:
+            notes = st.session_state.get("analyst_notes", {})
+            decision_log = flagged.loc[
+                flagged["transaction_id"].astype(str).isin(recorded)
+            ].copy()
+            decision_log["analyst_decision"] = decision_log["transaction_id"].astype(str).map(recorded)
+            decision_log["review_notes"] = decision_log["transaction_id"].astype(str).map(notes).fillna("")
+            st.download_button(
+                "Download analyst decision log",
+                decision_log.to_csv(index=False).encode("utf-8"),
+                file_name="analyst_decision_log.csv",
+                mime="text/csv",
+                key="download_decision_log",
+            )
 
-    st.markdown('</div>', unsafe_allow_html=True)
-
-    # -------------------------
-    # Analyst review workspace
-    # -------------------------
-
-    st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.markdown('<div class="panel-title">Analyst review workspace</div>', unsafe_allow_html=True)
-    st.caption(
-        "Select an alert, read the explanation, and record a human decision."
-    )
-
-    selected_alert_id = st.selectbox(
-        "Select alert to review",
-        alert_queue["alert_id"].tolist(),
-    )
-
-    alert = example_alerts[
-        example_alerts["alert_id"] == selected_alert_id
-    ].iloc[0]
-
-    col1, col2, col3, col4 = st.columns(4)
-
-    with col1:
-        _metric_card(
-            "Fraud probability",
-            f"{alert['fraud_probability']:.1%}",
-            "Model-based fraud risk",
-            "#dc2626" if alert["fraud_probability"] >= 0.5 else "#155eef",
-        )
-
-    with col2:
-        _metric_card(
-            "Risk band",
-            alert["risk_band"],
-            "Model risk category",
-            "#dc2626" if alert["risk_band"] == "High" else "#155eef",
-        )
-
-    with col3:
-        _metric_card(
-            "Review priority",
-            f"{alert['priority_score']:.2f}",
-            "Higher means review sooner",
-            "#b54708",
-        )
-
-    with col4:
-        _metric_card(
-            "Transaction amount",
-            f"R {alert['amount']:,.0f}",
-            "Transaction value",
-        )
-
-    st.markdown('<div class="panel-title">Transaction details</div>', unsafe_allow_html=True)
-
-    detail_col1, detail_col2, detail_col3 = st.columns(3)
-
-    with detail_col1:
-        st.metric("Transaction type", alert["type"])
-
-    with detail_col2:
-        st.metric("Sender balance before", f"R {alert['oldbalanceOrg']:,.0f}")
-
-    with detail_col3:
-        st.metric("Recipient balance before", f"R {alert['oldbalanceDest']:,.0f}")
-
-    amount_ratio = (
-        alert["amount"] / alert["oldbalanceOrg"]
-        if alert["oldbalanceOrg"] > 0
-        else 0
-    )
-
-    explanation = (
-        f"This {alert['type']} transaction was assigned a fraud probability of "
-        f"{alert['fraud_probability']:.1%}. "
-    )
-
-    if alert["type"] in ["TRANSFER", "CASH_OUT"]:
-        explanation += (
-            "TRANSFER and CASH-OUT transactions are generally more relevant to "
-            "fraud risk than other transaction types. "
-        )
-
-    if amount_ratio >= 0.8:
-        explanation += (
-            "The transaction amount is very high compared with the sender’s "
-            "starting balance, which increases the model’s concern. "
-        )
-    elif amount_ratio >= 0.4:
-        explanation += (
-            "The transaction amount is moderately high compared with the sender’s "
-            "starting balance. "
-        )
-    else:
-        explanation += (
-            "The transaction amount is small compared with the sender’s starting "
-            "balance. "
-        )
-
-    if alert["fraud_probability"] >= 0.5:
-        explanation += (
-            "Because the fraud probability is above 50%, this alert is classified "
-            "as high risk and should be reviewed urgently."
-        )
-    elif alert["fraud_probability"] >= 0.10:
-        explanation += (
-            "Because the fraud probability is between 10% and 50%, this alert is "
-            "classified as medium risk and should be monitored or reviewed."
-        )
-    else:
-        explanation += (
-            "Because the fraud probability is below 10%, this alert is classified "
-            "as low risk."
-        )
-
-    st.info(explanation)
-
-    st.caption(
-        "This explanation describes patterns learned by the model. It does not prove "
-        "that the transaction is fraudulent."
-    )
-
-    st.markdown('<div class="panel-title">Record analyst decision</div>', unsafe_allow_html=True)
-
-    decision = st.radio(
-        "What should happen to this alert?",
-        [
-            "Confirm fraud",
-            "False positive",
-            "Needs further investigation",
-        ],
-        horizontal=True,
-        key=f"decision_{selected_alert_id}",
-    )
-
-    analyst_notes = st.text_area(
-        "Analyst notes",
-        placeholder="Write a short note explaining the decision.",
-        key=f"notes_{selected_alert_id}",
-    )
-
-    if st.button(
-        "Save decision",
-        type="primary",
-        key=f"save_{selected_alert_id}",
-    ):
-        if "analyst_feedback" not in st.session_state:
-            st.session_state["analyst_feedback"] = []
-
-        st.session_state["analyst_feedback"].append(
-            {
-                "alert_id": selected_alert_id,
-                "decision": decision,
-                "fraud_probability": alert["fraud_probability"],
-                "risk_band": alert["risk_band"],
-                "priority_score": alert["priority_score"],
-                "analyst_notes": analyst_notes,
-            }
-        )
-
-        st.success(
-            f"Decision saved for {selected_alert_id}: {decision}."
-        )
-
-    st.markdown('</div>', unsafe_allow_html=True)
-
-    # -------------------------
-    # Cost simulator
-    # -------------------------
-
-    st.markdown('<div class="panel">', unsafe_allow_html=True)
+    st.markdown('<div class="section-kicker">05 / ESTIMATE IMPACT</div>', unsafe_allow_html=True)
     st.markdown('<div class="panel-title">Cost-impact simulator</div>', unsafe_allow_html=True)
-    st.caption(
-        "Estimate the operational effect of reviewing alerts using model precision "
-        "and recall."
-    )
-
-    simulation_inputs = st.columns(3)
-
-    with simulation_inputs[0]:
-        transaction_volume = st.number_input(
-            "Transactions to simulate",
-            min_value=1,
-            value=10_000,
-            step=1_000,
-        )
-
-    with simulation_inputs[1]:
-        fraud_prevalence = st.slider(
-            "Expected fraud prevalence (%)",
-            min_value=0.01,
-            max_value=10.0,
-            value=0.13,
-            step=0.01,
-        ) / 100
-
-    with simulation_inputs[2]:
-        review_capacity = st.number_input(
-            "Analyst review capacity",
-            min_value=1,
-            value=200,
-            step=25,
-        )
-
-    cost_inputs = st.columns(2)
-
-    with cost_inputs[0]:
-        false_positive_cost = st.number_input(
-            "Cost per false alert (R)",
-            min_value=0.0,
-            value=5.0,
-            step=1.0,
-        )
-
-    with cost_inputs[1]:
-        missed_fraud_cost = st.number_input(
-            "Cost per missed fraud (R)",
-            min_value=0.0,
-            value=100.0,
-            step=10.0,
-        )
-
+    st.caption("Scenario estimate based on validation precision and recall; actual uploaded labels are not used to estimate this operational impact.")
+    inputs = st.columns(3)
+    with inputs[0]:
+        transaction_volume = st.number_input("Transactions to simulate", min_value=1, value=max(1, len(batch)), step=1_000, key="impact_volume")
+    with inputs[1]:
+        fraud_prevalence = st.slider("Expected fraud prevalence (%)", min_value=0.01, max_value=10.0, value=0.13, step=0.01, key="impact_prevalence") / 100
+    with inputs[2]:
+        review_capacity = st.number_input("Analyst review capacity", min_value=1, value=200, step=25, key="impact_capacity")
+    costs = st.columns(2)
+    with costs[0]:
+        false_positive_cost = st.number_input("Cost per false alert (R)", min_value=0.0, value=5.0, step=1.0, key="impact_fp_cost")
+    with costs[1]:
+        missed_fraud_cost = st.number_input("Cost per missed fraud (R)", min_value=0.0, value=100.0, step=10.0, key="impact_fn_cost")
     expected_fraud = transaction_volume * fraud_prevalence
     true_positives = expected_fraud * recall
     false_negatives = expected_fraud - true_positives
-
-    estimated_alerts = min(
-        float(transaction_volume),
-        true_positives / precision if precision > 0 else float(transaction_volume),
-    )
-
+    estimated_alerts = min(float(transaction_volume), true_positives / precision if precision > 0 else float(transaction_volume))
     false_positives = max(0.0, estimated_alerts - true_positives)
-
-    estimated_cost = (
-        false_positives * false_positive_cost
-        + false_negatives * missed_fraud_cost
-    )
-
-    metric_columns = st.columns(4)
-
-    with metric_columns[0]:
-        st.metric("Alerts for review", f"{estimated_alerts:,.0f}")
-
-    with metric_columns[1]:
-        st.metric("False alerts", f"{false_positives:,.0f}")
-
-    with metric_columns[2]:
-        st.metric("Missed fraud", f"{false_negatives:,.0f}")
-
-    with metric_columns[3]:
-        st.metric("Estimated total cost", f"R {estimated_cost:,.2f}")
-
+    estimated_cost = false_positives * false_positive_cost + false_negatives * missed_fraud_cost
+    metrics = st.columns(4)
+    for column, label, value in zip(metrics, ["Alerts for review", "False alerts", "Missed fraud", "Estimated total cost"], [f"{estimated_alerts:,.0f}", f"{false_positives:,.0f}", f"{false_negatives:,.0f}", f"R {estimated_cost:,.2f}"]):
+        with column:
+            st.metric(label, value)
     if estimated_alerts > review_capacity:
-        st.warning(
-            f"Estimated alerts exceed capacity by "
-            f"{estimated_alerts - review_capacity:,.0f} transactions."
-        )
+        st.warning(f"Estimated alerts exceed capacity by {estimated_alerts - review_capacity:,.0f} transactions.")
     else:
         st.success("Estimated alert volume is within analyst review capacity.")
-
-    st.caption(
-        f"Estimates use validation precision ({precision:.1%}) and recall "
-        f"({recall:.1%}) for {model} with {STRATEGY_LABELS[strategy]}. "
-        "These are scenario estimates, not a production forecast."
-    )
-
-    st.markdown('</div>', unsafe_allow_html=True)
-
-    # -------------------------
-    # Analyst feedback summary
-    # -------------------------
-
-    st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.markdown('<div class="panel-title">Analyst feedback summary</div>', unsafe_allow_html=True)
-
-    feedback = st.session_state.get("analyst_feedback", [])
-
-    if not feedback:
-        st.info(
-            "No analyst decisions have been saved yet. Select an alert and save a "
-            "decision to create feedback."
-        )
-    else:
-        feedback_df = pd.DataFrame(feedback)
-
-        confirmed = (feedback_df["decision"] == "Confirm fraud").sum()
-        false_positives = (feedback_df["decision"] == "False positive").sum()
-        investigate = (
-            feedback_df["decision"] == "Needs further investigation"
-        ).sum()
-
-        summary_columns = st.columns(3)
-
-        with summary_columns[0]:
-            st.metric("Confirmed fraud", confirmed)
-
-        with summary_columns[1]:
-            st.metric("False positives", false_positives)
-
-        with summary_columns[2]:
-            st.metric("Needs investigation", investigate)
-
-        st.dataframe(
-            feedback_df,
-            use_container_width=True,
-            hide_index=True,
-        )
-
-        csv_data = feedback_df.to_csv(index=False).encode("utf-8")
-
-        st.download_button(
-            label="Download analyst feedback as CSV",
-            data=csv_data,
-            file_name="analyst_feedback.csv",
-            mime="text/csv",
-            use_container_width=True,
-        )
-
-        st.info(
-            "In a production system, analyst feedback could be used as new labelled "
-            "data for future model retraining. This helps the model learn from "
-            "confirmed fraud cases and reduce false positives."
-        )
-
-    st.markdown('</div>', unsafe_allow_html=True)
-
-    st.caption(
-        "This workspace supports human decision-making. It does not automatically "
-        "block transactions or replace fraud analysts."
-    )
+    st.caption(f"Scenario uses validation precision ({precision:.1%}) and recall ({recall:.1%}) for {model} with {STRATEGY_LABELS[strategy]}. The batch queue above contains scored cases; these cost estimates describe a separate hypothetical workload.")
 
 
 with st.sidebar:
-    st.markdown("## PaySim Fraud Review")
+    st.markdown("##  PaySim Fraud Review")
     st.caption("Fraud detection, model comparison, and explainable AI")
 
     st.divider()
@@ -1489,7 +1081,6 @@ with st.sidebar:
             "Model comparison",
             "Visual analysis",
             "Explainability",
-            "Transaction scoring",
             "Alert triage & cost simulator",
         ],
         label_visibility="collapsed",
@@ -1511,7 +1102,7 @@ elif page == "Explainability":
 elif page == "Alert triage & cost simulator":
     render_alert_triage()
 else:
-    render_prediction()
+    render_overview()
 
 
 st.markdown(
