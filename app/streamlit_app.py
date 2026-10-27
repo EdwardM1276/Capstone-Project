@@ -413,130 +413,452 @@ def render_overview() -> None:
 
     st.markdown('</div>', unsafe_allow_html=True)
 
-
 def render_prediction() -> None:
+    import hashlib
+    import math
+    from io import BytesIO
+
     _page_header(
-        "Score a transaction",
-        "Enter only fields available before the payment completes. The saved "
-        "threshold was selected on the validation period.",
+        "Transaction scoring",
+        "Check one transaction or upload a CSV to check several transactions.",
     )
 
     if not _current_model_available():
         st.info(
-            "No compatible model has been trained with the current chronological "
-            "split and pre-transaction feature schema."
+            "No compatible saved model is available for the current evaluation."
         )
         st.code(_training_command(), language="powershell")
         return
 
-    with st.form("prediction_form"):
-        st.markdown('<div class="panel-title">Transaction details</div>', unsafe_allow_html=True)
+    model_path = MODEL_DIR / "best_model.joblib"
+
+    try:
+        model_version = model_path.stat().st_mtime_ns
+        trained_model = get_model(str(model_path), model_version)
+    except Exception as error:
+        st.error(f"Could not load the saved model: {error}")
+        return
+
+    required_columns = [
+        "step",
+        "type",
+        "amount",
+        "oldbalanceOrg",
+        "oldbalanceDest",
+    ]
+
+    allowed_types = [
+        "CASH_IN",
+        "CASH_OUT",
+        "DEBIT",
+        "PAYMENT",
+        "TRANSFER",
+    ]
+
+    def score_transaction(transaction):
+        result = predict_transaction(trained_model, transaction)
+
+        probability = float(result["fraud_probability"])
+        threshold = float(result["threshold"])
+
+        if not math.isfinite(probability) or not 0 <= probability <= 1:
+            raise ValueError("The model returned an invalid fraud score.")
+
+        if not math.isfinite(threshold) or not 0 <= threshold <= 1:
+            raise ValueError("The saved decision threshold is invalid.")
+
+        return probability, threshold
+
+    mode = st.radio(
+        "Choose how to score transactions",
+        ["Single transaction", "Upload transactions"],
+        horizontal=True,
+        key="transaction_scoring_mode",
+    )
+
+    if mode == "Single transaction":
+        st.subheader("Enter transaction details")
+        st.caption(
+            "After changing a number, press Enter or click outside the "
+            "field to update the result."
+        )
 
         left, right = st.columns(2)
 
         with left:
-            step = st.number_input("PaySim hour step", min_value=0, value=1, step=1)
+            step = st.number_input(
+                "PaySim hour step",
+                min_value=0,
+                value=1,
+                step=1,
+                key="single_score_step",
+            )
+
             transaction_type = st.selectbox(
                 "Transaction type",
-                ["CASH_IN", "CASH_OUT", "DEBIT", "PAYMENT", "TRANSFER"],
+                allowed_types,
+                key="single_score_type",
             )
+
             amount = st.number_input(
                 "Transaction amount",
                 min_value=0.0,
                 value=1000.0,
                 step=100.0,
+                format="%.2f",
+                key="single_score_amount",
             )
 
         with right:
             oldbalance_org = st.number_input(
-                "Origin balance before",
+                "Sender balance before",
                 min_value=0.0,
                 value=5000.0,
                 step=100.0,
+                format="%.2f",
+                key="single_score_origin",
             )
+
             oldbalance_dest = st.number_input(
-                "Destination balance before",
+                "Recipient balance before",
                 min_value=0.0,
                 value=1000.0,
                 step=100.0,
+                format="%.2f",
+                key="single_score_destination",
             )
 
-        submitted = st.form_submit_button(
-            "Assess fraud risk",
-            type="primary",
-            use_container_width=True,
-        )
+        transaction = {
+            "step": int(step),
+            "type": transaction_type,
+            "amount": float(amount),
+            "oldbalanceOrg": float(oldbalance_org),
+            "oldbalanceDest": float(oldbalance_dest),
+        }
 
-    if not submitted:
-        return
+        try:
+            probability, threshold = score_transaction(transaction)
+        except Exception as error:
+            st.error(f"Could not score this transaction: {error}")
+            return
 
-    model_path = MODEL_DIR / "best_model.joblib"
+        flagged = probability >= threshold
 
-    transaction = {
-        "step": step,
-        "type": transaction_type,
-        "amount": amount,
-        "oldbalanceOrg": oldbalance_org,
-        "oldbalanceDest": oldbalance_dest,
-    }
+        st.divider()
+        st.subheader("Fraud-risk result")
 
-    try:
-        result = predict_transaction(
-            get_model(str(model_path), model_path.stat().st_mtime_ns),
-            transaction,
-        )
-    except (FileNotFoundError, OSError, RuntimeError, ValueError) as error:
-        st.error(f"Could not score this transaction: {error}")
-        return
+        score_col, threshold_col = st.columns(2)
+        score_col.metric("Fraud score", f"{probability:.4%}")
+        threshold_col.metric("Review threshold", f"{threshold:.4%}")
 
-    probability = float(result["fraud_probability"])
-    threshold = float(result["threshold"])
+        st.progress(probability)
 
-    st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.markdown('<div class="panel-title">Fraud-risk result</div>', unsafe_allow_html=True)
-
-    col1, col2, col3 = st.columns([1, 1, 2])
-
-    with col1:
-        if result["prediction"] == 1:
-            st.markdown(
-                f"""
-                <div class="risk-high">
-                    <div style="font-size:0.85rem; font-weight:700; opacity:0.9;">Model decision</div>
-                    <div style="font-size:1.6rem; font-weight:800;">Flag for review</div>
-                </div>
-                """,
-                unsafe_allow_html=True,
+        if flagged:
+            st.warning(
+                "Flag for review — this transaction meets or exceeds "
+                "the model's review threshold."
             )
         else:
-            st.markdown(
-                f"""
-                <div class="risk-low">
-                    <div style="font-size:0.85rem; font-weight:700; opacity:0.9;">Model decision</div>
-                    <div style="font-size:1.6rem; font-weight:800;">Below review threshold</div>
-                </div>
-                """,
-                unsafe_allow_html=True,
+            st.success(
+                "Below the review threshold — this transaction has "
+                "not been flagged by the model."
             )
 
-    with col2:
-        st.metric("Fraud score", f"{probability:.1%}")
+        st.caption(
+            "A model score is not proof of fraud. Being below the threshold "
+            "does not guarantee that a transaction is legitimate."
+        )
 
-    with col3:
-        st.metric("Decision threshold", f"{threshold:.1%}")
-        st.progress(min(probability, 1.0))
+        return
 
-    if result["prediction"] == 1:
-        st.error("This transaction should be sent to a fraud analyst for review.")
-    else:
-        st.success("This transaction is below the review threshold.")
+    # Upload mode
+    st.subheader("Upload several transactions")
 
-    st.caption(
-        "Scores are estimates from synthetic PaySim data, not production decisions."
+    st.write(
+        "Upload one CSV file with one transaction per row. "
+        "The app will automatically score every valid row and show the results."
     )
 
-    st.markdown('</div>', unsafe_allow_html=True)
+    st.caption(
+        "Required columns: step, type, amount, oldbalanceOrg, oldbalanceDest. "
+        "Other columns are ignored when predicting."
+    )
 
+    template = pd.DataFrame(
+        [
+            {
+                "step": 600,
+                "type": "TRANSFER",
+                "amount": 10000.0,
+                "oldbalanceOrg": 12000.0,
+                "oldbalanceDest": 0.0,
+            },
+            {
+                "step": 601,
+                "type": "PAYMENT",
+                "amount": 250.0,
+                "oldbalanceOrg": 5000.0,
+                "oldbalanceDest": 1000.0,
+            },
+        ]
+    )
+
+    st.download_button(
+        "Download example CSV template",
+        data=template.to_csv(index=False).encode("utf-8"),
+        file_name="transaction_upload_template.csv",
+        mime="text/csv",
+        key="download_transaction_template",
+    )
+
+    st.info(
+        "Use synthetic or authorised data only. Avoid uploading customer "
+        "names, account numbers, or other sensitive personal information."
+    )
+
+    uploaded_file = st.file_uploader(
+        "Choose a transaction CSV",
+        type=["csv"],
+        key="transaction_csv_upload",
+    )
+
+    if uploaded_file is None:
+        return
+
+    file_bytes = uploaded_file.getvalue()
+
+    if len(file_bytes) > 10 * 1024 * 1024:
+        st.error(
+            "This page accepts files up to 10 MB. "
+            "Split your CSV into smaller files."
+        )
+        return
+
+    try:
+        transactions = pd.read_csv(
+            BytesIO(file_bytes),
+            nrows=5001,
+        )
+        transactions.columns = transactions.columns.str.strip()
+    except Exception as error:
+        st.error(f"Could not read the CSV: {error}")
+        return
+
+    if transactions.empty:
+        st.warning("The CSV contains no transaction rows.")
+        return
+
+    if len(transactions) > 5000:
+        st.error(
+            "This page supports up to 5,000 transactions per upload. "
+            "Split your file into smaller batches. No rows have been scored."
+        )
+        return
+
+    if transactions.columns.duplicated().any():
+        st.error("The CSV contains duplicate column names.")
+        return
+
+    missing = [
+        column
+        for column in required_columns
+        if column not in transactions.columns
+    ]
+
+    if missing:
+        st.error(
+            "Missing required columns: " + ", ".join(missing)
+        )
+        st.write("Use the downloadable template to correct the file.")
+        return
+
+    # Preserve row order. Only these fields are sent to the model.
+    model_inputs = transactions[required_columns].copy()
+
+    model_inputs["type"] = (
+        model_inputs["type"]
+        .astype("string")
+        .str.strip()
+        .str.upper()
+    )
+
+    numeric_columns = [
+        "step",
+        "amount",
+        "oldbalanceOrg",
+        "oldbalanceDest",
+    ]
+
+    for column in numeric_columns:
+        model_inputs[column] = pd.to_numeric(
+            model_inputs[column],
+            errors="coerce",
+        )
+
+    # Retain completed results during filter and download interactions.
+    batch_key = (
+        hashlib.sha256(file_bytes).hexdigest(),
+        str(model_path),
+        model_version,
+    )
+
+    if st.session_state.get("transaction_batch_key") != batch_key:
+        scored_rows = []
+        progress = st.progress(0.0)
+        status = st.empty()
+
+        for position, (_, row) in enumerate(model_inputs.iterrows(), start=1):
+            output = {
+                "CSV row": position + 1,
+                "step": row["step"],
+                "type": row["type"],
+                "amount": row["amount"],
+                "oldbalanceOrg": row["oldbalanceOrg"],
+                "oldbalanceDest": row["oldbalanceDest"],
+                "Fraud score (%)": None,
+                "Threshold (%)": None,
+                "Decision": "Not scored",
+                "Error": "",
+            }
+
+            try:
+                for column in numeric_columns:
+                    value = float(row[column])
+
+                    if not math.isfinite(value) or value < 0:
+                        raise ValueError(
+                            f"{column} must be a non-negative, finite number."
+                        )
+
+                if float(row["step"]) % 1 != 0:
+                    raise ValueError("step must be a whole number.")
+
+                if pd.isna(row["type"]) or row["type"] not in allowed_types:
+                    raise ValueError(
+                        "type must be CASH_IN, CASH_OUT, DEBIT, "
+                        "PAYMENT, or TRANSFER."
+                    )
+
+                transaction = {
+                    "step": int(row["step"]),
+                    "type": str(row["type"]),
+                    "amount": float(row["amount"]),
+                    "oldbalanceOrg": float(row["oldbalanceOrg"]),
+                    "oldbalanceDest": float(row["oldbalanceDest"]),
+                }
+
+                probability, threshold = score_transaction(transaction)
+
+                output["Fraud score (%)"] = probability * 100
+                output["Threshold (%)"] = threshold * 100
+                output["Decision"] = (
+                    "Flag for review"
+                    if probability >= threshold
+                    else "Below threshold"
+                )
+
+            except Exception as error:
+                # Failed predictions must never be treated as low risk.
+                output["Error"] = str(error)
+
+            scored_rows.append(output)
+
+            progress.progress(position / len(model_inputs))
+            status.caption(
+                f"Checked {position:,} of {len(model_inputs):,} transactions."
+            )
+
+        progress.empty()
+        status.empty()
+
+        st.session_state["transaction_batch_results"] = pd.DataFrame(
+            scored_rows
+        )
+        st.session_state["transaction_batch_key"] = batch_key
+
+    results = st.session_state["transaction_batch_results"].copy()
+
+    flagged_count = int(
+        results["Decision"].eq("Flag for review").sum()
+    )
+    below_count = int(
+        results["Decision"].eq("Below threshold").sum()
+    )
+    failed_count = int(
+        results["Decision"].eq("Not scored").sum()
+    )
+
+    st.divider()
+    st.subheader("Upload results")
+
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("Transactions uploaded", f"{len(results):,}")
+    col2.metric("Flagged for review", f"{flagged_count:,}")
+    col3.metric("Below threshold", f"{below_count:,}")
+    col4.metric("Not scored", f"{failed_count:,}")
+
+    if failed_count:
+        st.warning(
+            f"{failed_count:,} rows could not be scored. "
+            "Check the Error column, correct those rows, and upload again. "
+            "Failed rows are not classified as safe."
+        )
+    else:
+        st.success("All uploaded transactions were scored successfully.")
+
+    result_filter = st.selectbox(
+        "Show",
+        [
+            "All transactions",
+            "Flagged for review",
+            "Below threshold",
+            "Not scored",
+        ],
+        key="batch_result_filter",
+    )
+
+    display_results = results.copy()
+
+    if result_filter != "All transactions":
+        display_results = display_results[
+            display_results["Decision"] == result_filter
+        ]
+
+    display_results = display_results.sort_values(
+        "Fraud score (%)",
+        ascending=False,
+        na_position="last",
+    )
+
+    st.dataframe(
+        display_results,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "Fraud score (%)": st.column_config.NumberColumn(
+                "Fraud score (%)",
+                format="%.4f",
+            ),
+            "Threshold (%)": st.column_config.NumberColumn(
+                "Threshold (%)",
+                format="%.4f",
+            ),
+        },
+    )
+
+    st.download_button(
+        "Download all transaction results",
+        data=results.to_csv(index=False).encode("utf-8"),
+        file_name="transaction_scoring_results.csv",
+        mime="text/csv",
+        key="download_all_scoring_results",
+    )
+
+    st.caption(
+        "These results use the saved model and its saved review threshold. "
+        "They are not confirmed fraud labels. Download results before "
+        "ending your session."
+    )
 
 def render_model_results() -> None:
     _page_header(
