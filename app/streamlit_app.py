@@ -1,10 +1,18 @@
+import hashlib
 import json
+import math
+from io import BytesIO
 from pathlib import Path
 
 import pandas as pd
 import streamlit as st
 
-from fraud_detection.config import DEFAULT_MAX_ROWS, FIGURE_DIR, MODEL_DIR, REPORT_DIR
+from fraud_detection.config import (
+    DEFAULT_MAX_ROWS,
+    FIGURE_DIR,
+    MODEL_DIR,
+    REPORT_DIR,
+)
 from fraud_detection.models import MODEL_NAMES
 from fraud_detection.prediction import load_best_model, predict_transaction
 
@@ -285,7 +293,12 @@ def _page_header(title: str, subtitle: str) -> None:
     st.markdown(f'<div class="app-subtitle">{subtitle}</div>', unsafe_allow_html=True)
 
 
-def _metric_card(label: str, value: str, note: str = "", colour: str = "#155eef") -> None:
+def _metric_card(
+    label: str,
+    value: str,
+    note: str = "",
+    colour: str = "#155eef",
+) -> None:
     st.markdown(
         f"""
         <div class="metric-card">
@@ -336,7 +349,7 @@ def render_overview() -> None:
         st.markdown('<div class="panel-title">Evaluation policy</div>', unsafe_allow_html=True)
         st.write(
             "Each strategy uses the same sampled rows and fixed model settings. "
-            "Thresholds are chosen on the middle time window to meet the recall "
+            "Review thresholds are chosen on the middle time window to meet the recall "
             "target. The latest window is reserved for final reporting."
         )
         st.markdown('</div>', unsafe_allow_html=True)
@@ -408,21 +421,27 @@ def render_overview() -> None:
         f"Time ranges by step: train {summary['split_step_ranges']['training']}, "
         f"validation {summary['split_step_ranges']['validation']}, "
         f"final test {summary['split_step_ranges']['test']}. The final test did "
-        "not select the model or threshold."
+        "not select the model or review threshold."
     )
 
     st.markdown('</div>', unsafe_allow_html=True)
 
-def render_prediction() -> None:
-    import hashlib
-    import math
-    from io import BytesIO
 
+def render_fraud_review() -> None:
     _page_header(
-        "Transaction scoring",
-        "Check one transaction or upload a CSV to check several transactions.",
+        "Fraud review & cost simulator",
+        "Score a single transaction or upload a CSV, then review prioritised "
+        "alerts and estimate the operational impact of fraud review.",
     )
 
+    render_prediction()
+
+    st.divider()
+
+    render_alert_triage()
+
+
+def render_prediction() -> None:
     if not _current_model_available():
         st.info(
             "No compatible saved model is available for the current evaluation."
@@ -465,7 +484,7 @@ def render_prediction() -> None:
             raise ValueError("The model returned an invalid fraud score.")
 
         if not math.isfinite(threshold) or not 0 <= threshold <= 1:
-            raise ValueError("The saved decision threshold is invalid.")
+            raise ValueError("The saved review threshold is invalid.")
 
         return probability, threshold
 
@@ -565,13 +584,12 @@ def render_prediction() -> None:
             )
 
         st.caption(
-            "A model score is not proof of fraud. Being below the threshold "
-            "does not guarantee that a transaction is legitimate."
+            "A model score is not proof of fraud. Being below the review "
+            "threshold does not guarantee that a transaction is legitimate."
         )
 
         return
 
-    # Upload mode
     st.subheader("Upload several transactions")
 
     st.write(
@@ -672,7 +690,6 @@ def render_prediction() -> None:
         st.write("Use the downloadable template to correct the file.")
         return
 
-    # Preserve row order. Only these fields are sent to the model.
     model_inputs = transactions[required_columns].copy()
 
     model_inputs["type"] = (
@@ -695,7 +712,6 @@ def render_prediction() -> None:
             errors="coerce",
         )
 
-    # Retain completed results during filter and download interactions.
     batch_key = (
         hashlib.sha256(file_bytes).hexdigest(),
         str(model_path),
@@ -716,7 +732,7 @@ def render_prediction() -> None:
                 "oldbalanceOrg": row["oldbalanceOrg"],
                 "oldbalanceDest": row["oldbalanceDest"],
                 "Fraud score (%)": None,
-                "Threshold (%)": None,
+                "Review threshold (%)": None,
                 "Decision": "Not scored",
                 "Error": "",
             }
@@ -750,15 +766,14 @@ def render_prediction() -> None:
                 probability, threshold = score_transaction(transaction)
 
                 output["Fraud score (%)"] = probability * 100
-                output["Threshold (%)"] = threshold * 100
+                output["Review threshold (%)"] = threshold * 100
                 output["Decision"] = (
                     "Flag for review"
                     if probability >= threshold
-                    else "Below threshold"
+                    else "Below review threshold"
                 )
 
             except Exception as error:
-                # Failed predictions must never be treated as low risk.
                 output["Error"] = str(error)
 
             scored_rows.append(output)
@@ -782,7 +797,7 @@ def render_prediction() -> None:
         results["Decision"].eq("Flag for review").sum()
     )
     below_count = int(
-        results["Decision"].eq("Below threshold").sum()
+        results["Decision"].eq("Below review threshold").sum()
     )
     failed_count = int(
         results["Decision"].eq("Not scored").sum()
@@ -794,7 +809,7 @@ def render_prediction() -> None:
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("Transactions uploaded", f"{len(results):,}")
     col2.metric("Flagged for review", f"{flagged_count:,}")
-    col3.metric("Below threshold", f"{below_count:,}")
+    col3.metric("Below review threshold", f"{below_count:,}")
     col4.metric("Not scored", f"{failed_count:,}")
 
     if failed_count:
@@ -810,8 +825,8 @@ def render_prediction() -> None:
         "Show",
         [
             "All transactions",
-            "Flagged for review",
-            "Below threshold",
+            "Flag for review",
+            "Below review threshold",
             "Not scored",
         ],
         key="batch_result_filter",
@@ -839,8 +854,8 @@ def render_prediction() -> None:
                 "Fraud score (%)",
                 format="%.4f",
             ),
-            "Threshold (%)": st.column_config.NumberColumn(
-                "Threshold (%)",
+            "Review threshold (%)": st.column_config.NumberColumn(
+                "Review threshold (%)",
                 format="%.4f",
             ),
         },
@@ -859,6 +874,7 @@ def render_prediction() -> None:
         "They are not confirmed fraud labels. Download results before "
         "ending your session."
     )
+
 
 def render_model_results() -> None:
     _page_header(
@@ -882,7 +898,9 @@ def render_model_results() -> None:
         "validation cost, not by the final test results."
     )
 
-    model_order = [model for model in MODEL_NAMES if model in results["model"].unique()]
+    model_order = [
+        model for model in MODEL_NAMES if model in results["model"].unique()
+    ]
     model_tabs = st.tabs(model_order)
 
     display_columns = [
@@ -975,7 +993,7 @@ def render_visualizations() -> None:
 
     visual_tabs = st.tabs(
         [
-            " Performance by algorithm",
+            "Performance by algorithm",
             "Pareto frontiers",
             "High-score risk",
         ]
@@ -989,7 +1007,9 @@ def render_visualizations() -> None:
                 use_container_width=True,
             )
         else:
-            st.warning("The performance dashboard is missing. Rerun the current training pipeline.")
+            st.warning(
+                "The performance dashboard is missing. Rerun the current training pipeline."
+            )
 
     with visual_tabs[1]:
         if pareto_path.is_file():
@@ -999,7 +1019,9 @@ def render_visualizations() -> None:
                 use_container_width=True,
             )
         else:
-            st.warning("The Pareto dashboard is missing. Rerun the current training pipeline.")
+            st.warning(
+                "The Pareto dashboard is missing. Rerun the current training pipeline."
+            )
 
     with visual_tabs[2]:
         if risk_map_path.is_file():
@@ -1029,7 +1051,8 @@ def render_visualizations() -> None:
 
     st.caption(
         f"Run {summary['run_id']} completed {summary['completed_at']}. "
-        "Pareto dominance is calculated on the final period for display, not model selection."
+        "Pareto dominance is calculated on the final period for display, "
+        "not model selection."
     )
 
     st.markdown('</div>', unsafe_allow_html=True)
@@ -1038,8 +1061,8 @@ def render_visualizations() -> None:
 def render_explainability() -> None:
     _page_header(
         "Explainability and XAI",
-        "Understand how the winning fraud-detection model makes predictions using "
-        "SHAP and LIME.",
+        "Understand how the winning fraud-detection model makes predictions "
+        "using SHAP and LIME.",
     )
 
     metadata = _read_json(MODEL_DIR / "best_model.json")
@@ -1069,7 +1092,7 @@ def render_explainability() -> None:
 
     with col2:
         _metric_card(
-            "Decision threshold",
+            "Review threshold",
             f"{metadata.get('threshold', 0):.4f}",
             "Selected on validation data",
             "#b54708",
@@ -1107,7 +1130,7 @@ def render_explainability() -> None:
                 "Selection metric",
                 metadata.get("selection_metric", "Not available"),
             ],
-            ["Decision threshold", f"{metadata.get('threshold', 0):.4f}"],
+            ["Review threshold", f"{metadata.get('threshold', 0):.4f}"],
             [
                 "Validation precision",
                 f"{validation_metrics.get('precision', 0):.4f}",
@@ -1138,7 +1161,7 @@ def render_explainability() -> None:
         [
             "SHAP global explanation",
             "LIME local explanation",
-            " Business interpretation",
+            "Business interpretation",
         ]
     )
 
@@ -1196,7 +1219,7 @@ def render_explainability() -> None:
         if lime_path.is_file():
             st.image(
                 str(lime_path),
-                caption="LIME explanation for one transaction predicted as fraud",
+                caption="LIME local explanation for one transaction predicted as fraud",
                 use_container_width=True,
             )
         else:
@@ -1263,11 +1286,7 @@ def render_explainability() -> None:
 
 
 def render_alert_triage() -> None:
-    _page_header(
-        "Human-in-the-loop alert triage",
-        "Prioritise fraud alerts, understand why they were flagged, and record "
-        "analyst decisions for future model improvement.",
-    )
+    st.subheader("Human-in-the-loop alert triage")
 
     current = _current_results()
 
@@ -1277,12 +1296,11 @@ def render_alert_triage() -> None:
 
     results, _ = current
 
-    # -------------------------
-    # Select model and strategy
-    # -------------------------
-
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.markdown('<div class="panel-title">Select model and strategy</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="panel-title">Select model and strategy</div>',
+        unsafe_allow_html=True,
+    )
 
     model_columns = st.columns(2)
 
@@ -1316,10 +1334,6 @@ def render_alert_triage() -> None:
     )
 
     st.markdown('</div>', unsafe_allow_html=True)
-
-    # -------------------------
-    # Generate example alerts
-    # -------------------------
 
     example_alerts = pd.DataFrame(
         [
@@ -1410,12 +1424,11 @@ def render_alert_triage() -> None:
         ascending=False,
     ).reset_index(drop=True)
 
-    # -------------------------
-    # Priority alert queue
-    # -------------------------
-
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.markdown('<div class="panel-title">Priority alert queue</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="panel-title">Priority alert queue</div>',
+        unsafe_allow_html=True,
+    )
     st.caption(
         "Alerts are ranked using fraud probability, transaction-value risk, and "
         "model uncertainty. Higher-priority alerts should be reviewed first."
@@ -1449,7 +1462,10 @@ def render_alert_triage() -> None:
         use_container_width=True,
         hide_index=True,
         column_config={
-            "amount": st.column_config.NumberColumn("Amount", format="R %.2f"),
+            "amount": st.column_config.NumberColumn(
+                "Amount",
+                format="R %.2f",
+            ),
             "fraud_probability": st.column_config.ProgressColumn(
                 "Fraud probability",
                 min_value=0.0,
@@ -1467,12 +1483,11 @@ def render_alert_triage() -> None:
 
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # -------------------------
-    # Analyst review workspace
-    # -------------------------
-
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.markdown('<div class="panel-title">Analyst review workspace</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="panel-title">Analyst review workspace</div>',
+        unsafe_allow_html=True,
+    )
     st.caption(
         "Select an alert, read the explanation, and record a human decision."
     )
@@ -1519,7 +1534,10 @@ def render_alert_triage() -> None:
             "Transaction value",
         )
 
-    st.markdown('<div class="panel-title">Transaction details</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="panel-title">Transaction details</div>',
+        unsafe_allow_html=True,
+    )
 
     detail_col1, detail_col2, detail_col3 = st.columns(3)
 
@@ -1527,10 +1545,16 @@ def render_alert_triage() -> None:
         st.metric("Transaction type", alert["type"])
 
     with detail_col2:
-        st.metric("Sender balance before", f"R {alert['oldbalanceOrg']:,.0f}")
+        st.metric(
+            "Sender balance before",
+            f"R {alert['oldbalanceOrg']:,.0f}",
+        )
 
     with detail_col3:
-        st.metric("Recipient balance before", f"R {alert['oldbalanceDest']:,.0f}")
+        st.metric(
+            "Recipient balance before",
+            f"R {alert['oldbalanceDest']:,.0f}",
+        )
 
     amount_ratio = (
         alert["amount"] / alert["oldbalanceOrg"]
@@ -1588,7 +1612,10 @@ def render_alert_triage() -> None:
         "that the transaction is fraudulent."
     )
 
-    st.markdown('<div class="panel-title">Record analyst decision</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="panel-title">Record analyst decision</div>',
+        unsafe_allow_html=True,
+    )
 
     decision = st.radio(
         "What should happen to this alert?",
@@ -1632,12 +1659,11 @@ def render_alert_triage() -> None:
 
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # -------------------------
-    # Cost simulator
-    # -------------------------
-
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.markdown('<div class="panel-title">Cost-impact simulator</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="panel-title">Cost-impact simulator</div>',
+        unsafe_allow_html=True,
+    )
     st.caption(
         "Estimate the operational effect of reviewing alerts using model precision "
         "and recall."
@@ -1724,7 +1750,9 @@ def render_alert_triage() -> None:
             f"{estimated_alerts - review_capacity:,.0f} transactions."
         )
     else:
-        st.success("Estimated alert volume is within analyst review capacity.")
+        st.success(
+            "Estimated alert volume is within analyst review capacity."
+        )
 
     st.caption(
         f"Estimates use validation precision ({precision:.1%}) and recall "
@@ -1734,12 +1762,11 @@ def render_alert_triage() -> None:
 
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # -------------------------
-    # Analyst feedback summary
-    # -------------------------
-
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.markdown('<div class="panel-title">Analyst feedback summary</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="panel-title">Analyst feedback summary</div>',
+        unsafe_allow_html=True,
+    )
 
     feedback = st.session_state.get("analyst_feedback", [])
 
@@ -1811,8 +1838,7 @@ with st.sidebar:
             "Model comparison",
             "Visual analysis",
             "Explainability",
-            "Transaction scoring",
-            "Alert triage & cost simulator",
+            "Fraud review & cost simulator",
         ],
         label_visibility="collapsed",
     )
@@ -1830,13 +1856,12 @@ elif page == "Visual analysis":
     render_visualizations()
 elif page == "Explainability":
     render_explainability()
-elif page == "Alert triage & cost simulator":
-    render_alert_triage()
 else:
-    render_prediction()
+    render_fraud_review()
 
 
 st.markdown(
-    '<div class="footer-note">PaySim Fraud Review Dashboard · Model outputs support fraud review and should not replace human judgement.</div>',
+    '<div class="footer-note">PaySim Fraud Review Dashboard · Model outputs support '
+    'fraud review and should not replace human judgement.</div>',
     unsafe_allow_html=True,
 )
