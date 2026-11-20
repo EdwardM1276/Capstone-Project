@@ -168,15 +168,37 @@ From the repository root, after running training:
 streamlit run app/streamlit_app.py
 ```
 
-The app includes a project overview, transaction scoring, model comparison,
-generated visualisations, and human-in-the-loop triage. In the fraud-review
-tab, upload and score a CSV (up to 5,000 rows and 10 MB); transactions flagged
-by the saved model's validation-derived threshold become the priority queue. Selecting
-an alert opens the analyst workspace for that same uploaded row, identified by
-its CSV row number. Decisions and the feedback summary are scoped to the active
-upload. Rows that fail scoring are excluded from the queue and must be corrected
-and re-uploaded. The app loads the exported model and does not retrain at launch.
-The `examples/sample_transactions.csv` file contains sample input values.
+The app includes a project overview, single-transaction scoring, model
+comparison, visual analysis, explainability, and a fraud-review workflow. In
+the review tab, select one of the saved model/imbalance-strategy artifacts,
+upload a CSV of transactions (up to 200 MB), filter the scored priority queue
+by the documented risk bands, and record a decision and notes for each
+selected alert. The sample files are stored in the repository for download;
+download one to your computer and upload it through the CSV file picker. They
+are not preloaded into the app. A single-transaction mode uses the same queue,
+review, and cost workflow.
+
+The queue shows only alert ID, transaction type, amount, fraud probability,
+review probability, and risk band. Review probability is a heuristic
+prioritisation estimate based on fraud score, relative transaction amount, and
+score uncertainty; it is not a separately trained or calibrated probability.
+Alerts are grouped by risk band, then ordered by fraud probability.
+
+Uploads require `step`, `type`, `amount`, `oldbalanceOrg`, and
+`oldbalanceDest`. The full PaySim schema is also accepted. An optional
+`isFraud` label is excluded from scoring and analyst details; it is used only
+for aggregate, post-scoring benchmark estimates in the cost simulator. When
+labels are absent, the simulator uses probability-weighted exposure estimates
+and identifies them as estimates. Outputs are decision-support scenarios, not
+financial forecasts.
+
+Twelve reproducible, non-overlapping 100,000-transaction PaySim CSV samples
+are available under [`data/sample_datasets/`](data/sample_datasets/). Their
+source rows are excluded from the deterministic 200,000-row training sample,
+and each file is ordered chronologically by `step`. See [`data/README.md`](data/README.md)
+for provenance and regeneration instructions. Download a sample from the
+repository to your computer and upload it like any other CSV. The
+`examples/sample_transactions.csv` file remains a small feature-only example.
 
 ## Engineered features
 
