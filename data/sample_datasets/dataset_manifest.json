@@ -1,0 +1,106 @@
+{
+  "source_file": "paysim dataset.csv",
+  "source_rows": 6362620,
+  "training_sample_rows_excluded": 200000,
+  "training_sample_seed": 42,
+  "review_sample_seed": 43,
+  "rows_per_file": 100000,
+  "files": [
+    {
+      "file": "transactions_01.csv",
+      "rows": 100000,
+      "fraud_rows": 118,
+      "first_step": 1,
+      "last_step": 742,
+      "size_bytes": 7841229
+    },
+    {
+      "file": "transactions_02.csv",
+      "rows": 100000,
+      "fraud_rows": 138,
+      "first_step": 1,
+      "last_step": 743,
+      "size_bytes": 7841900
+    },
+    {
+      "file": "transactions_03.csv",
+      "rows": 100000,
+      "fraud_rows": 109,
+      "first_step": 1,
+      "last_step": 741,
+      "size_bytes": 7836868
+    },
+    {
+      "file": "transactions_04.csv",
+      "rows": 100000,
+      "fraud_rows": 130,
+      "first_step": 1,
+      "last_step": 742,
+      "size_bytes": 7843019
+    },
+    {
+      "file": "transactions_05.csv",
+      "rows": 100000,
+      "fraud_rows": 149,
+      "first_step": 1,
+      "last_step": 732,
+      "size_bytes": 7846855
+    },
+    {
+      "file": "transactions_06.csv",
+      "rows": 100000,
+      "fraud_rows": 128,
+      "first_step": 1,
+      "last_step": 736,
+      "size_bytes": 7842507
+    },
+    {
+      "file": "transactions_07.csv",
+      "rows": 100000,
+      "fraud_rows": 128,
+      "first_step": 1,
+      "last_step": 742,
+      "size_bytes": 7841293
+    },
+    {
+      "file": "transactions_08.csv",
+      "rows": 100000,
+      "fraud_rows": 129,
+      "first_step": 1,
+      "last_step": 741,
+      "size_bytes": 7846663
+    },
+    {
+      "file": "transactions_09.csv",
+      "rows": 100000,
+      "fraud_rows": 129,
+      "first_step": 1,
+      "last_step": 742,
+      "size_bytes": 7837572
+    },
+    {
+      "file": "transactions_10.csv",
+      "rows": 100000,
+      "fraud_rows": 140,
+      "first_step": 1,
+      "last_step": 736,
+      "size_bytes": 7842409
+    },
+    {
+      "file": "transactions_11.csv",
+      "rows": 100000,
+      "fraud_rows": 126,
+      "first_step": 1,
+      "last_step": 735,
+      "size_bytes": 7838658
+    },
+    {
+      "file": "transactions_12.csv",
+      "rows": 100000,
+      "fraud_rows": 125,
+      "first_step": 1,
+      "last_step": 742,
+      "size_bytes": 7838180
+    }
+  ]
+}
