@@ -65,19 +65,22 @@ st.markdown(
 
         html, body, [class*="css"] {
             font-family: 'Inter', sans-serif;
-            color: #f5f1e8;
+            color: #0f172a;
         }
 
         .stApp {
             background:
                 radial-gradient(circle at top left, rgba(21,94,239,0.08), transparent 45%),
                 radial-gradient(circle at top right, rgba(16,185,129,0.08), transparent 45%),
-                #301215 !important;
+                #d7c2c7 !important;
         }
 
         [data-testid="stAppViewContainer"],
         [data-testid="stMain"] {
-            background: #301215 !important;
+            background:
+                radial-gradient(circle at top left, rgba(21,94,239,0.08), transparent 45%),
+                radial-gradient(circle at top right, rgba(16,185,129,0.08), transparent 45%),
+                #d7c2c7 !important;
         }
 
         [data-testid="stHeader"] {
@@ -85,32 +88,32 @@ st.markdown(
         }
 
         section[data-testid="stSidebar"] {
-            background: linear-gradient(180deg, #0f172a 0%, #262D1A 100%);
+            background: #d7c2c7;
         }
 
         section[data-testid="stSidebar"] * {
-            color: #f5f1e8 !important;
+            color: #33282b !important;
         }
 
         .app-title {
             font-size: 2.35rem;
             font-weight: 800;
-            color: #f5f1e8;
+            color: #0f172a;
             margin-bottom: 0.15rem;
         }
 
         .app-subtitle {
             font-size: 1.02rem;
-            color: #e5ddd1;
+            color: #475569;
             margin-bottom: 1.4rem;
         }
 
         .metric-card {
-            background: #262D1A;
+            background: white;
             border-radius: 18px;
             padding: 1.2rem 1.3rem;
-            border: 1px solid rgba(245,241,232,0.18);
-            box-shadow: 0 10px 28px rgba(0,0,0,0.18);
+            border: 1px solid rgba(148,163,184,0.18);
+            box-shadow: 0 10px 28px rgba(15,23,42,0.07);
             height: 100%;
         }
 
@@ -119,35 +122,35 @@ st.markdown(
             font-weight: 700;
             letter-spacing: 0.08em;
             text-transform: uppercase;
-            color: #e5ddd1;
+            color: #64748b;
         }
 
         .metric-value {
             font-size: 1.9rem;
             font-weight: 800;
-            color: #f5f1e8;
+            color: #155eef;
             margin-top: 0.25rem;
         }
 
         .metric-note {
             font-size: 0.82rem;
-            color: #e5ddd1;
+            color: #64748b;
             margin-top: 0.25rem;
         }
 
         .panel {
-            background: #262D1A;
+            background: white;
             border-radius: 20px;
             padding: 1.5rem;
-            border: 1px solid rgba(245,241,232,0.18);
-            box-shadow: 0 10px 28px rgba(0,0,0,0.18);
+            border: 1px solid rgba(148,163,184,0.16);
+            box-shadow: 0 10px 28px rgba(15,23,42,0.06);
             margin-bottom: 1.2rem;
         }
 
         .panel-title {
             font-size: 1.12rem;
             font-weight: 700;
-            color: #f5f1e8;
+            color: #0f172a;
             margin-bottom: 0.8rem;
         }
 
@@ -167,17 +170,17 @@ st.markdown(
 
         .footer-note {
             text-align: center;
-            color: #e5ddd1;
+            color: #64748b;
             font-size: 0.84rem;
             margin-top: 2rem;
         }
 
         div[data-testid="stMetric"] {
-            background: #262D1A;
-            border: 1px solid rgba(245,241,232,0.18);
+            background: white;
+            border: 1px solid rgba(148,163,184,0.16);
             border-radius: 16px;
             padding: 1rem;
-            box-shadow: 0 8px 22px rgba(0,0,0,0.18);
+            box-shadow: 0 8px 22px rgba(15,23,42,0.05);
         }
 
         .stTabs [data-baseweb="tab-list"] {
@@ -185,13 +188,13 @@ st.markdown(
         }
 
         .stTabs [data-baseweb="tab"] {
-            background: #262D1A;
+            background: #e2e8f0;
             border-radius: 999px;
             padding: 0.45rem 1rem;
         }
 
         .stTabs [aria-selected="true"] {
-            background: #301215 !important;
+            background: #155eef !important;
         }
 
         .stTabs [aria-selected="true"] p {
