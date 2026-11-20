@@ -168,12 +168,15 @@ From the repository root, after running training:
 streamlit run app/streamlit_app.py
 ```
 
-The app includes a project overview, an interactive transaction form, the
-model-comparison table, and generated visualisations. The form requests only
-pre-transaction information and applies the selected model's validation-derived
-threshold.
-It loads the exported model and does not retrain at launch. The
-`examples/sample_transactions.csv` file contains sample input values.
+The app includes a project overview, transaction scoring, model comparison,
+generated visualisations, and human-in-the-loop triage. In the fraud-review
+tab, upload and score a CSV (up to 5,000 rows and 10 MB); transactions flagged
+by the saved model's validation-derived threshold become the priority queue. Selecting
+an alert opens the analyst workspace for that same uploaded row, identified by
+its CSV row number. Decisions and the feedback summary are scoped to the active
+upload. Rows that fail scoring are excluded from the queue and must be corrected
+and re-uploaded. The app loads the exported model and does not retrain at launch.
+The `examples/sample_transactions.csv` file contains sample input values.
 
 ## Engineered features
 

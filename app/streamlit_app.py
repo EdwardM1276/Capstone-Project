@@ -15,6 +15,10 @@ from fraud_detection.config import (
 )
 from fraud_detection.models import MODEL_NAMES
 from fraud_detection.prediction import load_best_model, predict_transaction
+from fraud_detection.review import (
+    build_uploaded_alert_queue,
+    calculate_uploaded_batch_impact,
+)
 
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
@@ -494,6 +498,7 @@ def render_prediction() -> None:
         horizontal=True,
         key="transaction_scoring_mode",
     )
+    st.session_state["transaction_batch_active"] = False
 
     if mode == "Single transaction":
         st.subheader("Enter transaction details")
@@ -790,8 +795,11 @@ def render_prediction() -> None:
             scored_rows
         )
         st.session_state["transaction_batch_key"] = batch_key
+        st.session_state["analyst_feedback"] = []
 
     results = st.session_state["transaction_batch_results"].copy()
+    st.session_state["transaction_batch_source_name"] = uploaded_file.name
+    st.session_state["transaction_batch_active"] = True
 
     flagged_count = int(
         results["Decision"].eq("Flag for review").sum()
@@ -1296,133 +1304,63 @@ def render_alert_triage() -> None:
 
     results, _ = current
 
+    if not st.session_state.get("transaction_batch_active"):
+        st.info(
+            "Upload and score a CSV above to create a queue from those transactions. "
+            "The analyst workspace will review alerts from that same scored batch."
+        )
+        return
+
+    scored_batch = st.session_state.get("transaction_batch_results")
+    batch_key = st.session_state.get("transaction_batch_key")
+    model_info = _read_json(MODEL_DIR / "best_model.json")
+    if scored_batch is None or batch_key is None:
+        st.error("The active upload has no scored transaction batch. Upload and score it again.")
+        return
+    if model_info is None:
+        st.error("The saved model metadata is missing. The uploaded batch cannot be matched to its model.")
+        return
+
+    model = str(model_info["model"])
+    strategy = str(model_info["imbalance_strategy"])
+    selected_rows = results.loc[
+        (results["model"] == model)
+        & (results["imbalance_strategy"] == strategy)
+    ]
+    if selected_rows.empty:
+        st.error(
+            "The active upload's saved model does not match the current evaluation. "
+            "Refresh the model results and score the CSV again."
+        )
+        return
+    batch_id = hashlib.sha256(repr(batch_key).encode("utf-8")).hexdigest()[:16]
+    source_name = st.session_state.get("transaction_batch_source_name", "uploaded CSV")
+    alert_queue = build_uploaded_alert_queue(scored_batch)
+    scored_count = int(
+        pd.to_numeric(scored_batch["Fraud score (%)"], errors="coerce").notna().sum()
+    )
+    failed_count = len(scored_batch) - scored_count
+
     st.markdown('<div class="panel">', unsafe_allow_html=True)
     st.markdown(
-        '<div class="panel-title">Select model and strategy</div>',
+        '<div class="panel-title">Scored upload for analyst review</div>',
         unsafe_allow_html=True,
     )
 
-    model_columns = st.columns(2)
-
-    with model_columns[0]:
-        model = st.selectbox(
-            "Model",
-            MODEL_NAMES,
-            key="triage_model",
-        )
-
-    model_results = results.loc[results["model"] == model]
-
-    with model_columns[1]:
-        strategy = st.selectbox(
-            "Imbalance strategy",
-            model_results["imbalance_strategy"].tolist(),
-            format_func=lambda value: STRATEGY_LABELS[value],
-            key="triage_strategy",
-        )
-
-    selected = model_results.loc[
-        model_results["imbalance_strategy"] == strategy
-    ].iloc[0]
-
-    precision = float(selected["validation_precision_at_recall_target"])
-    recall = float(selected["validation_recall"])
-
     st.caption(
-        f"Using validation precision of {precision:.1%} and recall of "
-        f"{recall:.1%} for {model} with {STRATEGY_LABELS[strategy]}."
+        f"{source_name}: {scored_count:,} of {len(scored_batch):,} row(s) scored, "
+        f"{len(alert_queue):,} sent for review. Scores use {model} with "
+        f"{STRATEGY_LABELS.get(strategy, strategy)} at a "
+        f"{float(model_info['threshold']):.2%} review threshold. "
+        "The analyst queue below contains only rows flagged from this upload."
     )
+    if failed_count:
+        st.warning(
+            f"{failed_count:,} row(s) were not scored and are excluded from the queue. "
+            "They must be corrected and uploaded again; they are not treated as safe."
+        )
 
     st.markdown('</div>', unsafe_allow_html=True)
-
-    example_alerts = pd.DataFrame(
-        [
-            {
-                "alert_id": "ALERT-001",
-                "step": 412,
-                "type": "TRANSFER",
-                "amount": 185000.0,
-                "oldbalanceOrg": 190000.0,
-                "oldbalanceDest": 0.0,
-                "fraud_probability": 0.94,
-            },
-            {
-                "alert_id": "ALERT-002",
-                "step": 418,
-                "type": "CASH_OUT",
-                "amount": 96000.0,
-                "oldbalanceOrg": 100000.0,
-                "oldbalanceDest": 12000.0,
-                "fraud_probability": 0.78,
-            },
-            {
-                "alert_id": "ALERT-003",
-                "step": 431,
-                "type": "TRANSFER",
-                "amount": 420000.0,
-                "oldbalanceOrg": 450000.0,
-                "oldbalanceDest": 25000.0,
-                "fraud_probability": 0.71,
-            },
-            {
-                "alert_id": "ALERT-004",
-                "step": 452,
-                "type": "CASH_OUT",
-                "amount": 240000.0,
-                "oldbalanceOrg": 250000.0,
-                "oldbalanceDest": 0.0,
-                "fraud_probability": 0.58,
-            },
-            {
-                "alert_id": "ALERT-005",
-                "step": 470,
-                "type": "PAYMENT",
-                "amount": 850.0,
-                "oldbalanceOrg": 4500.0,
-                "oldbalanceDest": 300.0,
-                "fraud_probability": 0.22,
-            },
-            {
-                "alert_id": "ALERT-006",
-                "step": 505,
-                "type": "CASH_IN",
-                "amount": 15000.0,
-                "oldbalanceOrg": 80000.0,
-                "oldbalanceDest": 5000.0,
-                "fraud_probability": 0.08,
-            },
-        ]
-    )
-
-    def assign_risk_band(probability):
-        if probability >= 0.50:
-            return "High"
-        elif probability >= 0.10:
-            return "Medium"
-        return "Low"
-
-    example_alerts["risk_band"] = example_alerts["fraud_probability"].apply(
-        assign_risk_band
-    )
-
-    max_amount = example_alerts["amount"].max()
-
-    example_alerts["amount_risk"] = example_alerts["amount"] / max_amount
-
-    example_alerts["uncertainty"] = 1 - abs(
-        example_alerts["fraud_probability"] - 0.5
-    ) * 2
-
-    example_alerts["priority_score"] = (
-        0.60 * example_alerts["fraud_probability"]
-        + 0.25 * example_alerts["amount_risk"]
-        + 0.15 * example_alerts["uncertainty"]
-    )
-
-    example_alerts = example_alerts.sort_values(
-        "priority_score",
-        ascending=False,
-    ).reset_index(drop=True)
 
     st.markdown('<div class="panel">', unsafe_allow_html=True)
     st.markdown(
@@ -1434,22 +1372,28 @@ def render_alert_triage() -> None:
         "model uncertainty. Higher-priority alerts should be reviewed first."
     )
 
+    risk_filter_options = ["All alerts"] + [
+        f"{band} risk"
+        for band in ("High", "Medium", "Low")
+        if alert_queue["risk_band"].eq(band).any()
+    ]
     risk_filter = st.selectbox(
         "Filter by risk band",
-        ["All alerts", "High risk", "Medium risk", "Low risk"],
+        risk_filter_options,
+        key=f"triage_risk_filter_{batch_id}",
     )
 
     if risk_filter == "High risk":
-        alert_queue = example_alerts[example_alerts["risk_band"] == "High"]
+        visible_alerts = alert_queue.loc[alert_queue["risk_band"] == "High"]
     elif risk_filter == "Medium risk":
-        alert_queue = example_alerts[example_alerts["risk_band"] == "Medium"]
+        visible_alerts = alert_queue.loc[alert_queue["risk_band"] == "Medium"]
     elif risk_filter == "Low risk":
-        alert_queue = example_alerts[example_alerts["risk_band"] == "Low"]
+        visible_alerts = alert_queue.loc[alert_queue["risk_band"] == "Low"]
     else:
-        alert_queue = example_alerts
+        visible_alerts = alert_queue
 
     st.dataframe(
-        alert_queue[
+        visible_alerts[
             [
                 "alert_id",
                 "type",
@@ -1481,6 +1425,22 @@ def render_alert_triage() -> None:
         },
     )
 
+    if visible_alerts.empty:
+        st.info("No flagged transactions match this risk-band filter.")
+        impact = calculate_uploaded_batch_impact(
+            scored_batch, [], review_cost_per_alert=5, false_confirmation_cost=5,
+            loss_multiplier=1,
+        )
+        st.metric(
+            "Estimated exposure without triage",
+            f"R {impact['exposure_without_triage']:,.2f}",
+        )
+        st.caption(
+            "Exposure is estimated by weighting each transaction amount by its model "
+            "fraud score. This is a scenario estimate, not observed loss."
+        )
+        return
+
     st.markdown('</div>', unsafe_allow_html=True)
 
     st.markdown('<div class="panel">', unsafe_allow_html=True)
@@ -1494,12 +1454,17 @@ def render_alert_triage() -> None:
 
     selected_alert_id = st.selectbox(
         "Select alert to review",
-        alert_queue["alert_id"].tolist(),
+        visible_alerts["alert_id"].tolist(),
+        key=f"triage_alert_{batch_id}_{risk_filter}",
     )
 
-    alert = example_alerts[
-        example_alerts["alert_id"] == selected_alert_id
+    alert = alert_queue.loc[
+        alert_queue["alert_id"] == selected_alert_id
     ].iloc[0]
+    st.caption(
+        f"Reviewing {selected_alert_id} from {source_name}, "
+        f"CSV row {int(alert['CSV row']):,}."
+    )
 
     col1, col2, col3, col4 = st.columns(4)
 
@@ -1508,7 +1473,7 @@ def render_alert_triage() -> None:
             "Fraud probability",
             f"{alert['fraud_probability']:.1%}",
             "Model-based fraud risk",
-            "#dc2626" if alert["fraud_probability"] >= 0.5 else "#155eef",
+            "#dc2626" if alert["risk_band"] == "High" else "#155eef",
         )
 
     with col2:
@@ -1589,19 +1554,19 @@ def render_alert_triage() -> None:
             "balance. "
         )
 
-    if alert["fraud_probability"] >= 0.5:
+    if alert["risk_band"] == "High":
         explanation += (
-            "Because the fraud probability is above 50%, this alert is classified "
+            "Because the fraud probability is 5% or higher, this alert is classified "
             "as high risk and should be reviewed urgently."
         )
-    elif alert["fraud_probability"] >= 0.10:
+    elif alert["risk_band"] == "Medium":
         explanation += (
-            "Because the fraud probability is between 10% and 50%, this alert is "
+            "Because the fraud probability is between 1% and 5%, this alert is "
             "classified as medium risk and should be monitored or reviewed."
         )
     else:
         explanation += (
-            "Because the fraud probability is below 10%, this alert is classified "
+            "Because the fraud probability is below 1%, this alert is classified "
             "as low risk."
         )
 
@@ -1625,25 +1590,34 @@ def render_alert_triage() -> None:
             "Needs further investigation",
         ],
         horizontal=True,
-        key=f"decision_{selected_alert_id}",
+        key=f"decision_{batch_id}_{selected_alert_id}",
     )
 
     analyst_notes = st.text_area(
         "Analyst notes",
         placeholder="Write a short note explaining the decision.",
-        key=f"notes_{selected_alert_id}",
+        key=f"notes_{batch_id}_{selected_alert_id}",
     )
 
     if st.button(
         "Save decision",
         type="primary",
-        key=f"save_{selected_alert_id}",
+        key=f"save_{batch_id}_{selected_alert_id}",
     ):
-        if "analyst_feedback" not in st.session_state:
-            st.session_state["analyst_feedback"] = []
-
-        st.session_state["analyst_feedback"].append(
+        feedback = st.session_state.setdefault("analyst_feedback", [])
+        feedback = [
+            item
+            for item in feedback
+            if not (
+                item.get("batch_id") == batch_id
+                and item.get("alert_id") == selected_alert_id
+            )
+        ]
+        feedback.append(
             {
+                "batch_id": batch_id,
+                "source_name": source_name,
+                "CSV row": int(alert["CSV row"]),
                 "alert_id": selected_alert_id,
                 "decision": decision,
                 "fraud_probability": alert["fraud_probability"],
@@ -1652,10 +1626,17 @@ def render_alert_triage() -> None:
                 "analyst_notes": analyst_notes,
             }
         )
+        st.session_state["analyst_feedback"] = feedback
 
         st.success(
             f"Decision saved for {selected_alert_id}: {decision}."
         )
+
+    batch_feedback = [
+        item
+        for item in st.session_state.get("analyst_feedback", [])
+        if item.get("batch_id") == batch_id
+    ]
 
     st.markdown('</div>', unsafe_allow_html=True)
 
@@ -1665,99 +1646,67 @@ def render_alert_triage() -> None:
         unsafe_allow_html=True,
     )
     st.caption(
-        "Estimate the operational effect of reviewing alerts using model precision "
-        "and recall."
+        "Estimate potential exposure and review costs from the scored transactions "
+        "in this CSV batch."
     )
 
-    simulation_inputs = st.columns(3)
-
-    with simulation_inputs[0]:
-        transaction_volume = st.number_input(
-            "Transactions to simulate",
-            min_value=1,
-            value=10_000,
-            step=1_000,
-        )
-
-    with simulation_inputs[1]:
-        fraud_prevalence = st.slider(
-            "Expected fraud prevalence (%)",
-            min_value=0.01,
-            max_value=10.0,
-            value=0.13,
-            step=0.01,
-        ) / 100
-
-    with simulation_inputs[2]:
-        review_capacity = st.number_input(
-            "Analyst review capacity",
-            min_value=1,
-            value=200,
-            step=25,
-        )
-
-    cost_inputs = st.columns(2)
-
-    with cost_inputs[0]:
-        false_positive_cost = st.number_input(
-            "Cost per false alert (R)",
-            min_value=0.0,
-            value=5.0,
-            step=1.0,
-        )
-
-    with cost_inputs[1]:
-        missed_fraud_cost = st.number_input(
-            "Cost per missed fraud (R)",
-            min_value=0.0,
-            value=100.0,
-            step=10.0,
-        )
-
-    expected_fraud = transaction_volume * fraud_prevalence
-    true_positives = expected_fraud * recall
-    false_negatives = expected_fraud - true_positives
-
-    estimated_alerts = min(
-        float(transaction_volume),
-        true_positives / precision if precision > 0 else float(transaction_volume),
+    cost_inputs = st.columns(3)
+    review_cost = cost_inputs[0].number_input(
+        "Analyst cost per reviewed alert (R)",
+        min_value=0.0,
+        value=5.0,
+        step=1.0,
+        key=f"triage_review_cost_{batch_id}",
     )
-
-    false_positives = max(0.0, estimated_alerts - true_positives)
-
-    estimated_cost = (
-        false_positives * false_positive_cost
-        + false_negatives * missed_fraud_cost
+    false_confirmation_cost = cost_inputs[1].number_input(
+        "Cost per wrongly confirmed alert (R)",
+        min_value=0.0,
+        value=5.0,
+        step=1.0,
+        key=f"triage_false_confirmation_cost_{batch_id}",
+    )
+    loss_multiplier = cost_inputs[2].number_input(
+        "Loss per fraud amount (multiplier)",
+        min_value=0.0,
+        value=1.0,
+        step=0.1,
+        key=f"triage_loss_multiplier_{batch_id}",
+    )
+    impact = calculate_uploaded_batch_impact(
+        scored_batch,
+        batch_feedback,
+        review_cost,
+        false_confirmation_cost,
+        loss_multiplier,
     )
 
     metric_columns = st.columns(4)
-
-    with metric_columns[0]:
-        st.metric("Alerts for review", f"{estimated_alerts:,.0f}")
-
-    with metric_columns[1]:
-        st.metric("False alerts", f"{false_positives:,.0f}")
-
-    with metric_columns[2]:
-        st.metric("Missed fraud", f"{false_negatives:,.0f}")
-
-    with metric_columns[3]:
-        st.metric("Estimated total cost", f"R {estimated_cost:,.2f}")
-
-    if estimated_alerts > review_capacity:
-        st.warning(
-            f"Estimated alerts exceed capacity by "
-            f"{estimated_alerts - review_capacity:,.0f} transactions."
-        )
-    else:
-        st.success(
-            "Estimated alert volume is within analyst review capacity."
-        )
-
+    metric_columns[0].metric(
+        "Estimated exposure without triage",
+        f"R {impact['exposure_without_triage']:,.2f}",
+    )
+    metric_columns[1].metric(
+        "Exposure associated with confirmed alerts",
+        f"R {impact['exposure_associated_with_confirmed']:,.2f}",
+    )
+    metric_columns[2].metric(
+        "Estimated cost after triage",
+        f"R {impact['remaining_exposure'] + impact['total_cost_after_triage']:,.2f}",
+    )
+    metric_columns[3].metric(
+        "Estimated net value",
+        f"R {impact['net_value']:,.2f}",
+    )
+    st.write(
+        f"Reviewed {impact['reviewed_count']:,} of {len(alert_queue):,} flagged alerts. "
+        f"Estimated analyst cost: R {impact['analyst_cost']:,.2f}; "
+        f"estimated cost of false confirmations: "
+        f"R {impact['false_confirmation_cost']:,.2f}."
+    )
     st.caption(
-        f"Estimates use validation precision ({precision:.1%}) and recall "
-        f"({recall:.1%}) for {model} with {STRATEGY_LABELS[strategy]}. "
-        "These are scenario estimates, not a production forecast."
+        "Exposure is estimated by weighting each transaction amount by its model "
+        "fraud score. Confirmed fraud decisions are assumed to prevent the associated "
+        "exposure. These are scenario estimates, not observed losses or a forecast."
     )
 
     st.markdown('</div>', unsafe_allow_html=True)
@@ -1768,7 +1717,7 @@ def render_alert_triage() -> None:
         unsafe_allow_html=True,
     )
 
-    feedback = st.session_state.get("analyst_feedback", [])
+    feedback = batch_feedback
 
     if not feedback:
         st.info(
@@ -1777,6 +1726,7 @@ def render_alert_triage() -> None:
         )
     else:
         feedback_df = pd.DataFrame(feedback)
+        public_feedback = feedback_df.drop(columns="batch_id")
 
         confirmed = (feedback_df["decision"] == "Confirm fraud").sum()
         false_positives = (feedback_df["decision"] == "False positive").sum()
@@ -1787,21 +1737,23 @@ def render_alert_triage() -> None:
         summary_columns = st.columns(3)
 
         with summary_columns[0]:
-            st.metric("Confirmed fraud", confirmed)
+            st.metric("Total reviewed", len(feedback_df))
 
         with summary_columns[1]:
-            st.metric("False positives", false_positives)
+            st.metric("Confirmed fraud", confirmed)
 
         with summary_columns[2]:
-            st.metric("Needs investigation", investigate)
+            st.metric("False positives", false_positives)
+
+        st.metric("Needs investigation", investigate)
 
         st.dataframe(
-            feedback_df,
+            public_feedback,
             use_container_width=True,
             hide_index=True,
         )
 
-        csv_data = feedback_df.to_csv(index=False).encode("utf-8")
+        csv_data = public_feedback.to_csv(index=False).encode("utf-8")
 
         st.download_button(
             label="Download analyst feedback as CSV",
