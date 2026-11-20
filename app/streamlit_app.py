@@ -69,16 +69,16 @@ st.markdown(
 
         html, body, [class*="css"] {
             font-family: 'Inter', sans-serif;
-            color: #0f172a;
+            color: #f5f1e8;
         }
 
         .stApp {
-            background: #d7c2c7 !important;
+            background: #301215 !important;
         }
 
         [data-testid="stAppViewContainer"],
         [data-testid="stMain"] {
-            background: #d7c2c7 !important;
+            background: #301215 !important;
         }
 
         [data-testid="stHeader"] {
@@ -86,32 +86,32 @@ st.markdown(
         }
 
         section[data-testid="stSidebar"] {
-            background: #d7c2c7;
+            background: #262D1A;
         }
 
         section[data-testid="stSidebar"] * {
-            color: #33282b !important;
+            color: #f5f1e8 !important;
         }
 
         .app-title {
             font-size: 2.35rem;
             font-weight: 800;
-            color: #0f172a;
+            color: #f5f1e8;
             margin-bottom: 0.15rem;
         }
 
         .app-subtitle {
             font-size: 1.02rem;
-            color: #475569;
+            color: #e5ddd1;
             margin-bottom: 1.4rem;
         }
 
         .metric-card {
-            background: white;
+            background: #262D1A;
             border-radius: 18px;
             padding: 1.2rem 1.3rem;
-            border: 1px solid rgba(148,163,184,0.18);
-            box-shadow: 0 10px 28px rgba(15,23,42,0.07);
+            border: 1px solid rgba(245,241,232,0.18);
+            box-shadow: 0 10px 28px rgba(0,0,0,0.18);
             height: 100%;
         }
 
@@ -120,35 +120,35 @@ st.markdown(
             font-weight: 700;
             letter-spacing: 0.08em;
             text-transform: uppercase;
-            color: #64748b;
+            color: #e5ddd1;
         }
 
         .metric-value {
             font-size: 1.9rem;
             font-weight: 800;
-            color: #155eef;
+            color: #f5f1e8;
             margin-top: 0.25rem;
         }
 
         .metric-note {
             font-size: 0.82rem;
-            color: #64748b;
+            color: #e5ddd1;
             margin-top: 0.25rem;
         }
 
         .panel {
-            background: white;
+            background: #262D1A;
             border-radius: 20px;
             padding: 1.5rem;
-            border: 1px solid rgba(148,163,184,0.16);
-            box-shadow: 0 10px 28px rgba(15,23,42,0.06);
+            border: 1px solid rgba(245,241,232,0.18);
+            box-shadow: 0 10px 28px rgba(0,0,0,0.18);
             margin-bottom: 1.2rem;
         }
 
         .panel-title {
             font-size: 1.12rem;
             font-weight: 700;
-            color: #0f172a;
+            color: #f5f1e8;
             margin-bottom: 0.8rem;
         }
 
@@ -168,17 +168,17 @@ st.markdown(
 
         .footer-note {
             text-align: center;
-            color: #64748b;
+            color: #e5ddd1;
             font-size: 0.84rem;
             margin-top: 2rem;
         }
 
         div[data-testid="stMetric"] {
-            background: white;
-            border: 1px solid rgba(148,163,184,0.16);
+            background: #262D1A;
+            border: 1px solid rgba(245,241,232,0.18);
             border-radius: 16px;
             padding: 1rem;
-            box-shadow: 0 8px 22px rgba(15,23,42,0.05);
+            box-shadow: 0 8px 22px rgba(0,0,0,0.18);
         }
 
         .stTabs [data-baseweb="tab-list"] {
@@ -186,13 +186,13 @@ st.markdown(
         }
 
         .stTabs [data-baseweb="tab"] {
-            background: #e2e8f0;
+            background: #262D1A;
             border-radius: 999px;
             padding: 0.45rem 1rem;
         }
 
         .stTabs [aria-selected="true"] {
-            background: #155eef !important;
+            background: #301215 !important;
         }
 
         .stTabs [aria-selected="true"] p {
@@ -1137,14 +1137,13 @@ def render_alert_triage() -> None:
 
     risk_filter = st.selectbox(
         "Filter by risk band",
-        ["High risk", "Medium risk", "Low risk", "All alerts"],
-        key=f"risk_filter_{batch['batch_id']}",
+        ["All risk bands", "High", "Medium", "Low"],
+        key=f"risk_band_filter_{batch['batch_id']}",
     )
-    if risk_filter == "All alerts":
+    if risk_filter == "All risk bands":
         alert_queue = transactions.copy()
     else:
-        chosen_band = risk_filter.split()[0]
-        alert_queue = transactions.loc[transactions["risk_band"] == chosen_band].copy()
+        alert_queue = transactions.loc[transactions["risk_band"] == risk_filter].copy()
     visible_columns = [
         "alert_id",
         "type",
